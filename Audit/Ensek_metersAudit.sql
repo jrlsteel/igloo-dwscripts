@@ -59,18 +59,18 @@ select
 	s.meter_point_id,
 	s.meterid,
 	s.meterserialnumber,
-	cast (nullif(s.installeddate,'') as timestamp) installeddate,
-	cast (nullif(s.removeddate,'') as timestamp) removeddate,
+	cast (nullif(s.installeddate,'') as timestamp) as installeddate,
+	cast (nullif(s.removeddate,'') as timestamp) as removeddate,
 	case when r.meter_id is null then 'n' else 'u' end as etlchangetype,
-	current_timestamp
+	current_timestamp as etlchange
 from aws_s3_ensec_api_extracts.cdb_meters s
 left outer join ref_meters r
       ON s.account_id = r.account_id
       and s.meter_point_id = r.meter_point_id
       and s.meterid = r.meter_id
 where (s.meterserialnumber != r.meterserialnumber
-			or nullif(s.installeddate, '')::timestamp != r.installeddate
-			or nullif(s.removeddate, '')::timestamp != r.removeddate
+			or cast (nullif(s.installeddate, '') as timestamp) != r.installeddate
+			or cast (nullif(s.removeddate, '') as timestamp) != r.removeddate
 			or r.meter_id is null);
 
 -- delete from ref_meters;
