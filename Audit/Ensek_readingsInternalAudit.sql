@@ -1,4 +1,5 @@
 --drop table ref_readings_internal;
+drop table igloosense."public".ref_readings_internal;
 create table if not exists ref_readings_internal
 (
 	account_id bigint,
@@ -55,78 +56,82 @@ create table if not exists ref_readings_internal_audit
 alter table ref_readings_internal_audit owner to igloo;
 
 -- New or Updated data for audit
-insert into ref_readings_internal_audit (
+-- insert into ref_readings_internal_audit (
 select
-  s.accountid,
-	s.meterpointid,
-	s.meterid,
-	s.meterreadingid,
-	s.registerid,
-	s.registerreadingid,
-	s.billable,
-	s.haslivecharge,
-	s.hasregisteradvance,
-	s.meterpointnumber,
-	s.meterpointtype,
+  cast (s.accountid as bigint) as accountid,
+	cast (s.meterpointid as bigint) as meterpointid,
+	cast (s.meterid as bigint) as meterid,
+	cast (s.meterreadingid as bigint) as meterreadingid,
+	cast (s.registerid as bigint) as registerid,
+	cast (s.registerreadingid as bigint) as registerreadingid,
+	cast (cast (case when s.billable = 'True' then 1 else 0 end as int) as boolean) as billable,
+	cast (cast (case when s.haslivecharge = 'True' then 1 else 0 end as int) as boolean) as haslivecharge,
+	cast (cast (case when s.hasregisteradvance = 'True' then 1 else 0 end as int) as boolean) as hasregisteradvance,
+	cast (s.meterpointnumber as bigint) as meterpointnumber,
+	trim(s.meterpointtype) as meterpointtype,
 	cast (s.meterreadingcreateddate as timestamp) meterreadingcreateddate,
 	cast (s.meterreadingdatetime as timestamp) meterreadingdatetime,
-	s.meterreadingsourceuid,
-	s.meterreadingstatusuid,
-	s.meterreadingtypeuid,
-	s.meterserialnumber,
-	s.readingvalue,
-	s.registerreference,
-	s.required,
-	case when r.register_reading_id  is null then 'n' else 'u' end etlchange,
-	current_timestamp
-from aws_s3_ensec_api_extracts.cdb_readingsinternal s
+	trim(s.meterreadingsourceuid) as meterreadingsourceuid,
+	trim(s.meterreadingstatusuid) as meterreadingstatusuid,
+	trim(s.meterreadingtypeuid) as meterreadingtypeuid,
+	trim(s.meterserialnumber) as meterserialnumber,
+	cast (s.readingvalue as double precision) as readingvalue,
+	trim(s.registerreference) as registerreference,
+	cast (cast (case when s.required = 'True' then 1 else 0 end as int) as boolean) as required,
+	case when r.register_reading_id  is null then 'n' else 'u' end etlchangetype,
+	current_timestamp etlchange
+from aws_s3_ensec_api_extracts.cdb_stagereadingsinternal s
       left outer join ref_readings_internal r
-      		on r.account_id = s.accountid
-      		and r.meter_point_id = s.meterpointid
-      		and r.meter_id = s.meterid
-      		and r.meter_reading_id = s.meterreadingid
-					and r.register_id = s.registerid
-					and r.register_reading_id = s.registerreadingid
-where s.billable != r.billable
-			or s.haslivecharge != r.haslivecharge
-			or s.hasregisteradvance != r.hasregisteradvance
-			or s.meterpointnumber != r.meterpointnumber
-			or s.meterpointtype != r.meterpointtype
+      		on r.account_id = cast (s.accountid as bigint)
+      		and r.meter_point_id = cast (s.meterpointid as bigint)
+      		and r.meter_id = cast (s.meterid as bigint)
+      		and r.meter_reading_id = cast (s.meterreadingid as bigint)
+					and r.register_id = cast (s.registerid as bigint)
+					and r.register_reading_id = cast (s.registerreadingid as bigint)
+where cast (cast (case when s.billable = 'True' then 1 else 0 end as int) as boolean) != r.billable
+			or cast (cast (case when s.haslivecharge = 'True' then 1 else 0 end as int) as boolean) != r.haslivecharge
+			or cast (cast (case when s.hasregisteradvance = 'True' then 1 else 0 end as int) as boolean) != r.hasregisteradvance
+			or cast (s.meterpointnumber as bigint) != r.meterpointnumber
+			or trim(s.meterpointtype) != trim(r.meterpointtype)
 			or cast (s.meterreadingcreateddate as timestamp) != r.meterreadingcreateddate
-			or cast (s.meterreadingdatetime as timestamp) != r.meterreadingcreateddate
-			or s.meterreadingsourceuid != r.meterreadingsourceuid
-			or s.meterreadingstatusuid != r.meterreadingstatusuid
-			or s.meterserialnumber != r.meterserialnumber
-			or s.readingvalue != r.readingvalue
-			or s.registerreference != r.registerreference
+			or cast (s.meterreadingdatetime as timestamp) != r.meterreadingdatetime
+			or trim(s.meterreadingsourceuid) != trim(r.meterreadingsourceuid)
+			or trim(s.meterreadingstatusuid) != trim(r.meterreadingstatusuid)
+			or trim(s.meterserialnumber) != trim(r.meterserialnumber)
+			or cast (s.readingvalue as double precision) != r.readingvalue
+			or trim(s.registerreference) != trim(r.registerreference)
+      or cast (cast (case when s.required = 'True' then 1 else 0 end as int) as boolean) != r.required
 			or r.register_reading_id is null
-);
+-- )
+;
 
 -- Overwrite ref table
-insert into ref_readings_internal (
-select accountid,
-	meterpointid,
-	meterid,
-	meterreadingid,
-	registerid,
-	registerreadingid,
-	billable,
-	haslivecharge,
-	hasregisteradvance,
-	meterpointnumber,
-	meterpointtype,
-	cast (meterreadingcreateddate as timestamp) readingcreateddate,
-	cast (meterreadingdatetime as timestamp) readingdatetime,
-	meterreadingsourceuid,
-	meterreadingstatusuid,
-	meterreadingtypeuid,
-	meterserialnumber,
-	readingvalue,
-	registerreference,
-	required
-	from aws_s3_ensec_api_extracts.cdb_readingsinternal
-)
-
-
-
-
+-- insert into ref_readings_internal (
+select cast (s.accountid as bigint) as accountid,
+	cast (s.meterpointid as bigint) as meterpointid,
+	cast (s.meterid as bigint) as meterid,
+	cast (s.meterreadingid as bigint) as meterreadingid,
+	cast (s.registerid as bigint) as registerid,
+	cast (s.registerreadingid as bigint) as registerreadingid,
+	cast (cast (case when s.billable = 'True' then 1 else 0 end as int) as boolean) as billable,
+	cast (cast (case when s.haslivecharge = 'True' then 1 else 0 end as int) as boolean) as haslivecharge,
+	cast (cast (case when s.hasregisteradvance = 'True' then 1 else 0 end as int) as boolean) as hasregisteradvance,
+	cast (s.meterpointnumber as bigint) as meterpointnumber,
+	trim(s.meterpointtype) as meterpointtype,
+	cast (s.meterreadingcreateddate as timestamp) meterreadingcreateddate,
+	cast (s.meterreadingdatetime as timestamp) meterreadingdatetime,
+	trim(s.meterreadingsourceuid) as meterreadingsourceuid,
+	trim(s.meterreadingstatusuid) as meterreadingstatusuid,
+	trim(s.meterreadingtypeuid) as meterreadingtypeuid,
+	trim(s.meterserialnumber) as meterserialnumber,
+	cast (s.readingvalue as double precision) as readingvalue,
+	trim(s.registerreference) as registerreference,
+	cast (cast (case when s.required = 'True' then 1 else 0 end as int) as boolean) as required
+	from aws_s3_ensec_api_extracts.cdb_stagereadingsinternal s
+--     )
+;
+--TESTING--
+-- test new rows
+delete from ref_readings_internal where account_id=2340; -- 44 rows
+-- test updated rows
+update ref_readings_internal set readingvalue = 100 where account_id = 2435;-- 45 rows
