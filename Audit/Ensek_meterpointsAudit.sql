@@ -21,7 +21,7 @@ having count(1) > 1;
 */
 
 
-
+drop table ref_meterpoints;
 create table ref_meterpoints
 (
 	account_id bigint encode delta,
@@ -33,13 +33,13 @@ create table ref_meterpoints
 	supplyenddate timestamp,
 	issmart boolean,
 	issmartcommunicating boolean,
-	meterpointtype varchar(255)
+	meterpointtype varchar(1)
 )
 ;
+alter table ref_meterpoints owner to igloo;
 
-alter table ref_meterpoints owner to igloo
-;
 
+drop table ref_meterpoints_audit;
 create table ref_meterpoints_audit
 (
 	account_id bigint encode delta,
@@ -51,7 +51,7 @@ create table ref_meterpoints_audit
 	supplyenddate timestamp,
 	issmart boolean,
 	issmartcommunicating boolean,
-	meterpointtype varchar(255),
+	meterpointtype varchar(1),
 	etlchangetype varchar(1),
 	etlchange timestamp
 )
@@ -100,5 +100,11 @@ where (s.meterpointnumber !=r.meterpointnumber
 						cast (nullif(s.supplyenddate, '') as timestamp)        as supplyenddate,
 						s.issmart,
 						s.issmartcommunicating,
-						s.meterpointtype
+						cast (s.meterpointtype as varchar(255))
 		 from aws_s3_ensec_api_extracts.cdb_meterpoints s;
+
+--TESTING--
+-- test new rows
+delete from ref_readings_internal where account_id=2340; -- 44 rows
+-- test updated rows
+update ref_readings_internal set readingvalue = 100 where account_id = 2435;-- 45 rows
