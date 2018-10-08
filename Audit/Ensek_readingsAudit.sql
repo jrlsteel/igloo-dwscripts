@@ -1,4 +1,4 @@
---
+
 -- select count(*) from ref_readings; --259780
 -- select count(*) from (
 -- select
@@ -37,7 +37,7 @@ alter table ref_readings owner to igloo
 create table ref_readings_audit
 (
 	account_id bigint,
-	meter_point_id bigint encode delta,
+	meter_point_id bigint,
 	reading_registerid bigint,
 	reading_id bigint,
 	id bigint,
@@ -56,50 +56,58 @@ alter table ref_readings_audit owner to igloo
 ;
 
 -- New or update for audit
-insert into ref_readings_audit (
+-- insert into ref_readings_audit (
 select
-		s.account_id,
-		s.meter_point_id,
-		s.reading_registerid,
-		s.reading_id,
-		s.id,
-		s.meterpointid,
+		cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id,
+		cast (s.reading_registerid as bigint) as reading_registerid,
+		cast (s.reading_id as bigint) as reading_id,
+		cast (s.id as bigint) as id,
+		cast (s.meterpointid as bigint) as meterpointid,
 		cast (nullif(s.datetime,'') as timestamp) as datetime,
 		cast (nullif(s.createddate, '') as timestamp) as createddate,
 		s.meterreadingsource,
 		s.readingtype,
-		s.reading_value,
-		case when r.reading_id is null then 'n' else 'u' end etlchangetype,
-		current_timestamp etlchange
-from aws_s3_ensec_api_extracts.cdb_readings s
+		cast (s.reading_value as double precision) as reading_value,
+		case when r.reading_id is null then 'n' else 'u' end as etlchangetype,
+		current_timestamp as etlchange
+from aws_s3_ensec_api_extracts.cdb_stagereadings s
        left outer join ref_readings r
-       		on r.account_id = s.account_id
-       		and r.meter_point_id = s.meter_point_id
-       		and r.reading_id = s.reading_id
+       		on r.account_id = cast (s.account_id as bigint)
+       		and r.meter_point_id = cast (s.meter_point_id as bigint)
+       		and r.reading_id = cast (s.reading_id as bigint)
 where cast (nullif(s.datetime, '') as timestamp) != r.datetime
-	  or cast (nullif(s.createddate, '') as timestamp) != r.createddate
+	    or cast (nullif(s.createddate, '') as timestamp) != r.createddate
 		or s.meterreadingsource != r.meterreadingsource
-		or s.reading_registerid != r.reading_registerid
+		or cast (s.reading_registerid as bigint) != r.reading_registerid
 		or s.readingtype != r.readingtype
-		or s.reading_value != r.reading_value
-		or s.meterpointid != r.meterpointid
-	  or s.id != r.id
-	  or s.reading_registerid != r.reading_registerid
-		or r.reading_id is null);
+		or cast (s.reading_value as double precision) != r.reading_value
+		or cast (s.meterpointid as bigint) != r.meterpointid
+	    or cast (s.id as bigint) != r.id
+	    or cast (s.reading_registerid as bigint) != r.reading_registerid
+	    or r.reading_id is null 
+-- )
+;
 
 -- overwrite ref
 insert into ref_readings (
 select
-		s.account_id,
-		s.meter_point_id,
-		s.reading_registerid,
-		s.reading_id,
-		s.id,
-		s.meterpointid,
-		cast (nullif(s.datetime, '') as timestamp) as datetime,
+		cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id ,
+		cast (s.reading_registerid as bigint) as reading_registerid ,
+		cast (s.reading_id as bigint) as reading_id ,
+		cast (s.id as bigint) as id ,
+		cast (s.meterpointid as bigint) as meterpointid ,
+		cast (nullif(s.datetime,'') as timestamp) as datetime,
 		cast (nullif(s.createddate, '') as timestamp) as createddate,
 		s.meterreadingsource,
 		s.readingtype,
-		s.reading_value
+		cast (s.reading_value as double precision)
 from aws_s3_ensec_api_extracts.cdb_readings s);
+
+select current_timestamp, r.etlchange,r.etlchangetype, count(*) from ref_readings_audit r group by r.etlchange,r.etlchangetype; --274042
+select count(*) from ref_readings r; --273994
+delete from ref_readings where account_id = 5595;
+update ref_readings set reading_value = 100 where account_id = 5595;
+
 
