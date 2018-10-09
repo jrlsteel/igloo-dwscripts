@@ -59,49 +59,64 @@ create table ref_registers_audit
 alter table ref_registers_audit owner to igloo
 ;
 
-
-
 -- New or Updated Registers SQL for audit
 -- insert into ref_registers_audit
 select
-		s.account_id,
-		s.meter_point_id,
-		s.meter_id,
-		s.register_id,
-		s.registers_eacaq,
-		s.registers_registerreference,
-		s.registers_sourceidtype,
-		s.registers_tariffcomponent,
-		s.registers_tpr,
-		s.registers_tprperioddescription,
+		cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id,
+		cast (s.meter_id as bigint) as meter_id,
+		cast (s.register_id as bigint) as register_id,
+		cast (s.registers_eacaq as double precision) as registers_eacaq,
+		trim (s.registers_registerreference) as registers_registerreference,
+		trim (s.registers_sourceidtype) as registers_sourceidtype,
+		trim (s.registers_tariffcomponent) as registers_tariffcomponent,
+		cast (s.registers_tpr as bigint) as registers_tpr,
+		trim (s.registers_tprperioddescription) as registers_tprperioddescription,
 		case when r.register_id is null then 'n' else 'u' end as etlchangetype,
 		current_timestamp etlchange
-from aws_s3_ensec_api_extracts.cdb_registers s
+from aws_s3_ensec_api_extracts.cdb_stageregisters s
        left outer join ref_registers r
-       	ON s.account_id = r.account_id
-       	and s.meter_point_id = r.meter_point_id
-       	and s.meter_id = r.meter_id
-       	and s.register_id = r.register_id
-where (s.registers_eacaq != r.registers_eacaq
-		or s.registers_registerreference != r.registers_registerreference
-		or s.registers_sourceidtype != r.registers_sourceidtype
-		or s.registers_tariffcomponent != r.registers_tariffcomponent
-		or s.registers_tpr != r.registers_tpr
-		or s.registers_tprperioddescription != r.registers_tprperioddescription
-		or r.register_id is null);
+       	ON cast (s.account_id as bigint) = r.account_id
+       	and cast (s.meter_point_id as bigint) = r.meter_point_id
+       	and cast (s.meter_id as bigint) = r.meter_id
+       	and cast (s.register_id as bigint) = r.register_id
+where
+    cast (s.registers_eacaq as double precision) != r.registers_eacaq
+		or trim (s.registers_registerreference) != trim(r.registers_registerreference)
+		or trim (s.registers_sourceidtype) != trim(r.registers_sourceidtype)
+		or trim (s.registers_tariffcomponent) != trim(r.registers_tariffcomponent)
+		or cast (s.registers_tpr as bigint) != r.registers_tpr
+		or trim (s.registers_tprperioddescription) != trim(r.registers_tprperioddescription)
+		or r.register_id is null
+;
 
 -- New Registers SQl for ref table
 -- delete from ref_registers;
 -- insert into ref_registers
 select
-		s.account_id as account_id,
-		s.meter_point_id as meter_point_id,
-		s.meter_id as meter_id,
-		s.register_id as register_id,
-		s.registers_eacaq as registers_eacaq,
-		s.registers_registerreference as registers_registerreference,
-		s.registers_sourceidtype as registers_sourceidtype,
-		s.registers_tariffcomponent as registers_tariffcomponent,
-		s.registers_tpr as registers_tpr,
-		s.registers_tprperioddescription as registers_tprperioddescription
-from aws_s3_ensec_api_extracts.cdb_registers s;
+    cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id,
+		cast (s.meter_id as bigint) as meter_id,
+		cast (s.register_id as bigint) as register_id,
+		cast (s.registers_eacaq as double precision) as registers_eacaq,
+		trim (s.registers_registerreference) as registers_registerreference,
+		trim (s.registers_sourceidtype) as registers_sourceidtype,
+		trim (s.registers_tariffcomponent) as registers_tariffcomponent,
+		cast (s.registers_tpr as bigint) as registers_tpr,
+		trim (s.registers_tprperioddescription) as registers_tprperioddescription
+from aws_s3_ensec_api_extracts.cdb_stageregisters s;
+;
+
+select r.etlchange, r.etlchangetype, count(*) from ref_registers_audit r group by r.etlchange, r.etlchangetype;
+
+select count(*) from aws_s3_ensec_api_extracts.cdb_stageregisters; --38318
+select count(*) from ref_registers r; -- 38318
+
+
+--Testing
+--update
+update ref_registers set registers_eacaq = 99.10 where account_id = 8427; -- 3 rows
+
+--delete
+delete from ref_registers where account_id = 14144; -- 3 rows
+
