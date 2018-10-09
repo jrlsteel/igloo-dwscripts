@@ -59,52 +59,60 @@ create table ref_meterpoints_audit
 
 alter table ref_meterpoints_audit owner to igloo
 ;
+
 -- New and update for audit tables
--- insert into ref_meterpoints_audit
+-- insert into ref_meterpoints_audit (
 select
-		s.account_id,
-		s.meter_point_id,
-		s.meterpointnumber,
+		cast (s.account_id as bigint) as account_id ,
+		cast (s.meter_point_id as bigint) as meter_point_id ,
+		cast (s.meterpointnumber as bigint) as meterpointnumber ,
 		cast (nullif(s.associationstartdate,'') as timestamp) as associationstartdate,
 		cast (nullif(s.associationenddate, '') as timestamp) as associationenddate,
 		cast (nullif(s.supplystartdate, '') as timestamp) as supplystartdate,
 		cast (nullif(s.supplyenddate, '') as timestamp) as supplyenddate,
-		s.issmart,
-		s.issmartcommunicating,
-		s.meterpointtype,
+		cast (cast (case when s.issmart = 'True' then 1 else 0 end as int) as boolean) as issmart,
+		cast (cast (case when s.issmartcommunicating = 'True' then 1 else 0 end as int) as boolean) as issmartcommunicating,
+		trim(s.meterpointtype) as meterpointtype,
 		case when r.meter_point_id is null then 'n' else 'u' end as etlchangetype,
-		current_timestamp
-from aws_s3_ensec_api_extracts.cdb_meterpoints s
+		current_timestamp as etlchange
+from aws_s3_ensec_api_extracts.cdb_stagemeterpoints s
        left outer join ref_meterpoints r
-       ON s.account_id = r.account_id
-       and s.meter_point_id = r.meter_point_id
-where (s.meterpointnumber !=r.meterpointnumber
+       ON cast (s.account_id as bigint) = r.account_id
+       and cast (s.meter_point_id as bigint) = r.meter_point_id
+where cast (s.meterpointnumber as bigint ) !=r.meterpointnumber
 		or cast (nullif(s.associationstartdate,'') as timestamp) != r.associationstartdate
 		or cast (nullif(s.associationenddate, '') as timestamp) != r.associationenddate
 		or cast (nullif(s.supplystartdate, '') as timestamp) != r.supplystartdate
-		or cast (nullif(s.supplyenddate, '') as timestamp) !=r.supplyenddate
-		or s.issmart != r.issmart
-		or s.issmartcommunicating != r.issmartcommunicating
-		or s.meterpointtype != r.meterpointtype
-		or r.meter_point_id is null);
+		or cast (nullif(s.supplyenddate, '') as timestamp) != r.supplyenddate
+		or cast (cast (case when s.issmart = 'True' then 1 else 0 end as int) as boolean) != r.issmart
+		or cast (cast (case when s.issmartcommunicating = 'True' then 1 else 0 end as int) as boolean) != r.issmartcommunicating
+		or trim(s.meterpointtype) != trim(r.meterpointtype)
+		or r.meter_point_id is null
+-- )
+;
 
 -- Insert to overwrite ref tables
 -- delete from ref_meterpoints;
 -- insert into ref_meterpoints
-		select s.account_id,
-						s.meter_point_id,
-						s.meterpointnumber,
-						cast (nullif(s.associationstartdate, '') as timestamp) as associationstartdate,
-						cast (nullif(s.associationenddate, '') as timestamp)   as associationenddate,
-						cast (nullif(s.supplystartdate, '') as timestamp)      as supplystartdate,
-						cast (nullif(s.supplyenddate, '') as timestamp)        as supplyenddate,
-						s.issmart,
-						s.issmartcommunicating,
-						cast (s.meterpointtype as varchar(255))
-		 from aws_s3_ensec_api_extracts.cdb_meterpoints s;
+select cast (s.account_id as bigint) as account_id ,
+		cast (s.meter_point_id as bigint) as meter_point_id ,
+		cast (s.meterpointnumber as bigint) as meterpointnumber ,
+		cast (nullif(s.associationstartdate,'') as timestamp) as associationstartdate,
+		cast (nullif(s.associationenddate, '') as timestamp) as associationenddate,
+		cast (nullif(s.supplystartdate, '') as timestamp) as supplystartdate,
+		cast (nullif(s.supplyenddate, '') as timestamp) as supplyenddate,
+		cast (cast (case when s.issmart = 'True' then 1 else 0 end as int) as boolean) as issmart,
+		cast (cast (case when s.issmartcommunicating = 'True' then 1 else 0 end as int) as boolean) as issmartcommunicating,
+		trim(s.meterpointtype) as meterpointtype
+from aws_s3_ensec_api_extracts.cdb_stagemeterpoints s;
+
+
+select current_timestamp, r.etlchange,r.etlchangetype, count(*) from ref_meterpoints_audit r group by r.etlchange,r.etlchangetype; --39795
+select count(*) from ref_meterpoints r; --39795
+
 
 --TESTING--
 -- test new rows
-delete from ref_readings_internal where account_id=2340; -- 44 rows
+delete from ref_meterpoints where account_id=2340; -- 44 rows
 -- test updated rows
-update ref_readings_internal set readingvalue = 100 where account_id = 2435;-- 45 rows
+update ref_meterpoints set issmart = 'False' where account_id = 2435;-- 45 rows
