@@ -48,36 +48,56 @@ alter table ref_meterpoints_attributes_audit owner to igloo
 --new or update for audit table
 
 -- Updated MeterPoints_Attributes SQL
--- insert into ref_meterpoints_attributes_audit
+-- Insert into ref_meterpoints_attributes_audit
+
 select
-	s.account_id,
-	s.meter_point_id,
-	s.attributes_attributename,
-	s.attributes_attributedescription,
-	s.attributes_attributevalue,
-	cast (nullif(s.attributes_effectivefromdate,'') as timestamp) as attributes_effectivefromdate,
-	cast (nullif(s.attributes_effectivetodate,'') as timestamp) as attributes_effectivetodate,
-	case when r.attributes_attributename is null then 'n' else 'u' end as etlchangetype,
-	current_timestamp
-from aws_s3_ensec_api_extracts.cdb_meterpointsattributes s
+    cast (s.account_id as bigint) as account_id,
+    cast (s.meter_point_id as bigint) as meter_point_id,
+    trim (s.attributes_attributename) as attributes_attributename,
+    trim (s.attributes_attributedescription) as attributes_attributedescription,
+    trim (s.attributes_attributevalue) as attributes_attributevalue,
+    cast (nullif (s.attributes_effectivefromdate, '') as timestamp) as attributes_effectivefromdate,
+    cast (nullif (s.attributes_effectivetodate, '') as timestamp) as attributes_effectivetodate,
+    case when r.attributes_attributename is null then 'n' else 'u' end as etlchangetype,
+    current_timestamp as etlchange
+from aws_s3_ensec_api_extracts.cdb_stagemeterpointsattributes s
 left outer join ref_meterpoints_attributes r
-      ON s.account_id = r.account_id
-      and s.meter_point_id = r.meter_point_id
-      and s.attributes_attributename = r.attributes_attributename
-      and s.attributes_attributedescription = r.attributes_attributedescription
-where (cast (nullif(s.attributes_effectivefromdate,'') as timestamp) != r.attributes_effectivefromdate
-      or cast (nullif(s.attributes_effectivetodate,'') as timestamp) != r.attributes_effectivetodate
-      or s.attributes_attributevalue != r.attributes_attributevalue
-			or r.attributes_attributename is null);
+      ON cast (s.account_id as bigint) = r.account_id
+      and cast (s.meter_point_id as bigint) = r.meter_point_id
+      and trim (s.attributes_attributename) = trim (r.attributes_attributename)
+      and trim (s.attributes_attributedescription) = trim (r.attributes_attributedescription)
+where cast (nullif (s.attributes_effectivefromdate, '') as timestamp) != r.attributes_effectivefromdate
+  or cast (nullif (s.attributes_effectivetodate, '') as timestamp) != r.attributes_effectivetodate
+  or trim (s.attributes_attributevalue) != trim (r.attributes_attributevalue)
+  or trim(r.attributes_attributename) = ''
+--     )
+;
 
 -- overwrite for ref table
 -- delete from ref_meterpoints_attributes;
 -- insert into ref_meterpoints_attributes
-select s.account_id,
-	s.meter_point_id,
-	s.attributes_attributename,
-	s.attributes_attributedescription,
-	s.attributes_attributevalue,
-	cast (nullif(s.attributes_effectivefromdate,'') as timestamp) as attributes_effectivefromdate,
-	cast (nullif(s.attributes_effectivetodate,'') as timestamp) as attributes_effectivetodate
-			from aws_s3_ensec_api_extracts.cdb_meterpointsattributes s;
+select cast (s.account_id as bigint) as account_id,
+    cast (s.meter_point_id as bigint) as meter_point_id,
+    trim (s.attributes_attributename) as attributes_attributename,
+    trim (s.attributes_attributedescription) as attributes_attributedescription,
+    trim (s.attributes_attributevalue) as attributes_attributevalue,
+    cast (nullif (s.attributes_effectivefromdate, '') as timestamp) as attributes_effectivefromdate,
+    cast (nullif (s.attributes_effectivetodate, '') as timestamp) as attributes_effectivetodate
+from aws_s3_ensec_api_extracts.cdb_stagemeterpointsattributes s;
+
+select count(*) from aws_s3_ensec_api_extracts.cdb_stagemeterpointsattributes; --882683
+select r.attributes_attributename from aws_s3_ensec_api_extracts.cdb_stagemeterpointsattributes r
+where trim(r.attributes_attributename) is null
+group by r.attributes_attributename
+; --882683
+select count(*) from ref_meterpoints_attributes r; -- 882683
+
+select r.etlchangetype, r.etlchange, count(*) from ref_meterpoints_attributes_audit r group by r.etlchangetype, r.etlchange; -- 880675
+
+
+--TESTING--
+-- test new rows
+delete from ref_meterpoints_attributes where account_id=14024; --
+-- test updated rows
+update ref_meterpoints_attributes set attributes_effectivefromdate = current_timestamp where account_id = 5928;-- 45 rows
+
