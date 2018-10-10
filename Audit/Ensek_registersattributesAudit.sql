@@ -48,37 +48,45 @@ create table ref_registers_attributes_audit
 alter table ref_registers_attributes_audit owner to igloo
 ;
 
-
---New or Updated Registers SQL for audit table
--- insert into ref_registers_attributes_audit
+-- insert into ref_registers_attributes_audit (
 select
-		s.account_id,
-		s.meter_point_id,
-		s.meter_id,
-		s.register_id,
-		s.registersattributes_attributename,
-		s.registersattributes_attributedescription,
-		s.registersattributes_attributevalue,
+		cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id,
+		cast (s.meter_id as bigint) as meter_id,
+		cast (s.register_id as bigint) as register_id,
+		trim(s.registersattributes_attributename) as registersattributes_attributename,
+		trim(s.registersattributes_attributedescription) as registersattributes_attributedescription,
+		trim(s.registersattributes_attributevalue) as registersattributes_attributevalue,
 		case when r.register_id is null then 'n' else 'u' end as etlchangetype,
-		current_timestamp etlchange
-from aws_s3_ensec_api_extracts.cdb_registersattributes s
+		current_timestamp as etlchange
+from aws_s3_ensec_api_extracts.cdb_stageregistersattributes s
        left outer join ref_registers_attributes r
-       		ON s.account_id = r.account_id
-       		and s.meter_point_id = r.meter_point_id
-       		and s.meter_id = r.meter_id
-       		and s.register_id = r.register_id
-       		and s.registersattributes_attributename = r.registersattributes_attributename
-       		and s.registersattributes_attributedescription = r.registersattributes_attributedescription
-       	where s.registersattributes_attributevalue != r.registersattributes_attributevalue
-					or r.register_id is null;
+       		ON cast (s.account_id as bigint) = r.account_id
+       		and cast (s.meter_point_id as bigint) = r.meter_point_id
+       		and cast (s.meter_id as bigint) = r.meter_id
+       		and cast (s.register_id as bigint) = r.register_id
+       		and trim (s.registersattributes_attributename) = trim (r.registersattributes_attributename)
+       		and trim (s.registersattributes_attributedescription) = trim (r.registersattributes_attributedescription)
+       	where trim (s.registersattributes_attributevalue) != trim (r.registersattributes_attributevalue)
+					or r.register_id is null
+-- 		)
+;
 
 
+-- insert into ref_registers_attributes (
 select
-		s.account_id as account_id,
-		s.meter_point_id as meter_point_id,
-		s.meter_id as meter_id,
-		s.register_id as register_id,
-		cast (s.registersattributes_attributename as varchar(255)) as registersattributes_attributename,
-		cast (s.registersattributes_attributedescription as varchar(255)) as registersattributes_attributedescription,
-		cast (s.registersattributes_attributevalue as varchar(255)) as registersattributes_attributevalue
-from aws_s3_ensec_api_extracts.cdb_registersattributes s
+		cast (s.account_id as bigint) as account_id,
+		cast (s.meter_point_id as bigint) as meter_point_id,
+		cast (s.meter_id as bigint) as meter_id,
+		cast (s.register_id as bigint) as register_id,
+		trim(s.registersattributes_attributename) as registersattributes_attributename,
+		trim(s.registersattributes_attributedescription) as registersattributes_attributedescription,
+		trim(s.registersattributes_attributevalue) as registersattributes_attributevalue
+from aws_s3_ensec_api_extracts.cdb_stageregistersattributes s
+-- 		)
+;
+
+select count(*) from aws_s3_ensec_api_extracts.cdb_stageregistersattributes; --131986
+select count(*) from ref_registers_attributes; --0
+
+select r.etlchange, r.etlchangetype, count(*) from ref_registers_attributes_audit r group by r.etlchange, r.etlchangetype;
