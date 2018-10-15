@@ -105,9 +105,3 @@ select
 		cast (s.reading_value as double precision)
 from aws_s3_ensec_api_extracts.cdb_readings s);
 
-select current_timestamp, r.etlchange,r.etlchangetype, count(*) from ref_readings_audit r group by r.etlchange,r.etlchangetype; --274042
-select count(*) from ref_readings r; --273994
-delete from ref_readings where account_id = 5595;
-update ref_readings set reading_value = 100 where account_id = 5595;
-
-
