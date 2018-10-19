@@ -1,3 +1,9 @@
+-- CHECK to get unique keys
+select count(*) from ref_cdb_user_permissions; --21890
+select count(*) from (
+select distinct r.id from ref_cdb_user_permissions r) --21890;
+
+
 create table ref_cdb_user_permissions
 (
 	id bigint encode delta,
@@ -73,15 +79,23 @@ from aws_s3_ensec_api_extracts.cdb_stagecdbsupplycontract s
 --     )
 ;
 
-select count(*) from ref_cdb_supply_contracts r;
-select count(*) from  aws_s3_ensec_api_extracts.cdb_stagecdbsupplycontract s; --21890
+--TESTING
+--Run1:
+--After 1st run
+select count(*) from  aws_s3_ensec_api_extracts.cdb_stagecdbuserpermissions s; --21890
+select count(*) from ref_cdb_user_permissions r; --21890
+select r.etlchangetype,r.etlchange, count(*) from ref_cdb_user_permissions_audit r group by r.etlchangetype, r.etlchange;
 
-select r.etlchangetype,r.etlchange, count(*) from ref_cdb_supply_contracts_audit r group by r.etlchangetype, r.etlchange;
 
-
---Testing
 --update
-update ref_cdb_supply_contracts set registration_id = 99999 where id = 16793;
+update ref_cdb_user_permissions set permissionable_id = 99999 where id = 20905;
 
 --delete
-delete from ref_cdb_supply_contracts where id = 14943;
+delete from ref_cdb_user_permissions where id = 17823;
+
+--Run2:
+--Run the process again
+-- Audit Checks
+select r.etlchange, r.etlchangetype, count(1) from ref_cdb_user_permissions_audit r group by r.etlchange, r.etlchangetype;
+--1 new rows
+--1 updated rows

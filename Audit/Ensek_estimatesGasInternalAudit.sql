@@ -93,5 +93,3 @@ Delete from ref_estimates_gas_internal where account_id = 19376; -- 2 rows
 --Run the process again
 -- Audit Checks
 select r.etlchange, r.etlchangetype, count(1) from ref_estimates_gas_internal_audit r group by r.etlchange, r.etlchangetype;
---2 new rows
---7 updated rows

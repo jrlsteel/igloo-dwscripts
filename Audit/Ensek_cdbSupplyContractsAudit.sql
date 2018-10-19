@@ -1,3 +1,9 @@
+-- CHECK to get unique keys
+select count(*) from ref_cdb_supply_contracts; --21890
+select count(*) from (
+select distinct r.id from ref_cdb_supply_contracts r) --21890;
+
+
 create table ref_cdb_supply_contracts
 (
 	id bigint encode delta,
@@ -72,15 +78,28 @@ from aws_s3_ensec_api_extracts.cdb_stagecdbsupplycontract s
 --     )
 ;
 
+--Testing
+-- Run1:
+-- After 1st Run
 select count(*) from ref_cdb_supply_contracts r;
 select count(*) from  aws_s3_ensec_api_extracts.cdb_stagecdbsupplycontract s; --21890
+select count(*) from  ref_cdb_supply_contracts_audit; --21890
+
 
 select r.etlchangetype,r.etlchange, count(*) from ref_cdb_supply_contracts_audit r group by r.etlchangetype, r.etlchange;
 
 
---Testing
 --update
-update ref_cdb_supply_contracts set registration_id = 99999 where id = 16793;
+update ref_cdb_supply_contracts set registration_id = 99999 where id = 19269;
+--1 rows
 
 --delete
-delete from ref_cdb_supply_contracts where id = 14943;
+delete from ref_cdb_supply_contracts where id = 10699;
+--1 rows
+
+--Run 2:
+--Run the process again
+-- Audit Checks
+select r.etlchange, r.etlchangetype, count(1) from ref_cdb_supply_contracts_audit r group by r.etlchange, r.etlchangetype;
+--1 new row
+--1 updated row
