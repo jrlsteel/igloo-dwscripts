@@ -411,24 +411,30 @@ select su.external_id                                       as account_id,
        max(case
              when (mp_gas.supplystartdate > mp_gas.supplyenddate) then 1
              else 0 end) over (partition by su.external_id) as has_enddate_before_startdate_gas
-from ref_cdb_supply_contracts su --inner join temp_cab_dates_quarter4_2018 we on we.external_id = su.external_id
-       inner join ref_cdb_user_permissions rcup on su.id = rcup.permissionable_id and permission_level = 0 and
-                                                   permissionable_type = 'App\\SupplyContract'
+from   ref_cdb_supply_contracts su --inner join temp_cab_dates_quarter4_2018 we on we.external_id = su.external_id
+       inner join ref_cdb_user_permissions rcup on su.id = rcup.permissionable_id and permission_level = 0 and  permissionable_type = 'App\\SupplyContract'
        inner join ref_cdb_users rcu on rcup.user_id = rcu.id
        inner join ref_cdb_addresses rca on su.supply_address_id = rca.id
-       left outer join ref_account_status ac on ac.account_id = su.external_id
+
+       --Ensek Meterpoint Elec
        left outer join ref_meterpoints mp_elec on mp_elec.account_id = su.external_id and mp_elec.meterpointtype = 'E'
-       left outer join ref_meters mt_elec
-         on mp_elec.meter_point_id = mt_elec.meter_point_id and mt_elec.removeddate is null
-       left outer join ref_registers reg_elec on mt_elec.meter_id = reg_elec.meter_id
+       left outer join ref_meterpoints_attributes mpa_elec on mp_elec.account_id = mpa_elec.account_id and mp_elec.meter_point_id = mpa_elec.meter_point_id and attributes_effectivetodate is null
+       left outer join ref_meters mt_elec on mp_elec.account_id = mt_elec.account_id and mp_elec.meter_point_id = mt_elec.meter_point_id and mt_elec.removeddate is null
+       --left outer join ref_meters_attributes mta_elec on mt_elec.meter_id = mta_elec.meter_id
+       left outer join ref_registers reg_elec on mt_elec.account_id = reg_elec.account_id and mt_elec.meter_id = reg_elec.meter_id
+
+       --Ensek Meterpoint Gas
        left outer join ref_meterpoints mp_gas on mp_gas.account_id = su.external_id and mp_gas.meterpointtype = 'G'
-       left outer join ref_meterpoints_attributes mpa_gas on mp_gas.meter_point_id = mpa_gas.meter_point_id and
-                                                              attributes_effectivetodate is null
-       left outer join ref_meters mt_gas on mp_gas.meter_point_id = mt_gas.meter_point_id and mt_gas.removeddate is null
-       left outer join ref_registers reg_gas on mt_gas.meter_id = reg_gas.meter_id
-       left outer join ref_registrations_status_gas rsg on mp_gas.account_id = rsg.account_id
+       left outer join ref_meterpoints_attributes mpa_gas on mp_gas.account_id = mpa_gas.account_id and mp_gas.meter_point_id = mpa_gas.meter_point_id and mpa_gas.attributes_effectivetodate is null
+       left outer join ref_meters mt_gas on mp_gas.account_id = mt_gas.account_id and mp_gas.meter_point_id = mt_gas.meter_point_id and mt_gas.removeddate is null
+       left outer join ref_registers reg_gas on mt_gas.account_id = reg_gas.account_id and mt_gas.meter_id = reg_gas.meter_id
+       --left outer join ref_registers_attributes rga_elec on reg_elec.register_id = rga_elec.register_id
+
+       --Status
+       left outer join ref_account_status ac on ac.account_id = su.external_id
+       left outer join ref_registrations_status_gas rsg on mp_elec.account_id = rsg.account_id
        left outer join ref_registrations_status_elec rse on mp_elec.account_id = rse.account_id
-    --     where su.external_id = 11993
+ --     where su.external_id = 11993
 group by su.external_id,
          rcup.user_id,
          rca.postcode,
