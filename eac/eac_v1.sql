@@ -1,7 +1,9 @@
 -- drop table temp_ref_calculated_eac_v1;
+delete from temp_ref_calculated_eac_v1;
 -- create table temp_ref_calculated_eac_v1
 --   DISTKEY(account_id) SORTKEY(account_id) as (
--- select * from (
+insert into temp_ref_calculated_eac_v1
+-- select count(*) from (
 select st.account_id,
        st.elec_GSP,
        st.elec_ssc,
@@ -128,15 +130,15 @@ from (select mp_elec.account_id                                                 
                                             and y.meterserialnumber = ee.serial_number and
                                           ee.effective_from = y.meterreadingdatetime
                               where y.n <= 2
-                                and y.total_reads >= 4
+--                                 and y.total_reads >= 4
                                 ) read_valid
                on read_valid.account_id = mp_elec.account_id and read_valid.register_id = reg_elec.register_id
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
-        and ac.account_id = 6988
---         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
---         and upper(ac.status) = 'LIVE'
+--         and ac.account_id = 6988
+        and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
+        and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
                mp_elec.meter_point_id,
                reg_elec.register_id,
@@ -281,13 +283,13 @@ from (select mp_elec.account_id                                                 
                                             and y.meterserialnumber = ee.serial_number and
                                           ee.effective_from = y.meterreadingdatetime
                               where y.n <= 2
-                                and y.total_reads >= 4
+--                                 and y.total_reads >= 4
                                 ) read_valid
                on read_valid.account_id = mp_elec.account_id and read_valid.register_id = reg_elec.register_id
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
-        and ac.account_id = 1836
+--         and ac.account_id = 1836
 --         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
 --         and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
@@ -332,8 +334,8 @@ $$;
 
 /*** EAC_v1 analysis ***/
 
-select v.*, t1.*, ac.status,
- count(*) over (partition by t1.account_id, t1.register_id) read_count
+select t1.category, t1.reason,
+ count(*)
  from (
 select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
                       and (igloo_eac_v1 != 0 and igloo_eac_v1 is not null) then
@@ -349,10 +351,12 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
             case when (igloo_eac_v1 = 0 or igloo_eac_v1 is null) then
                 case when (read_days_diff_elec = 0 or read_days_diff_elec is null) then
                         'Not Enough reads for calculation' else
-                    case when (previous_ind_eac_estimates = 0 or previous_ind_eac_estimates is null) then
+                    case when (read_consumption_elec = 0 or read_consumption_elec is null) then
+                        'Consumption is zero' else
+                        case when (previous_ind_eac_estimates = 0 or previous_ind_eac_estimates is null) then
                             'Previous_EAC is not available for calculation' else
-                        case when ((ppc is null or ppc = 0) and (bpp =0 or bpp is null)) then
-                            'No PPC or BPP is available from d18 for calculation' end end end else
+                            case when ((ppc is null or ppc = 0) and (bpp =0 or bpp is null)) then
+                                'No PPC or BPP is available from d18 for calculation' end end end end else
             case when (igloo_eac_v1 - latest_ind_eac_estimates != 0 and igloo_eac_v1 - latest_ind_eac_estimates is not null) and (igloo_eac_v1 != 0 or igloo_eac_v1 is not null) then
                 case when (latest_ind_eac_estimates = 0 or latest_ind_eac_estimates is null) then
                     'Latest EAC from Industry not available yet' else
@@ -372,10 +376,13 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
 
 
 from temp_ref_calculated_eac_v1 t) t1
-inner join ref_account_status ac on ac.account_id = t1.account_id
-left outer join ref_readings_internal_valid v on v.account_id = t1.account_id and v.register_id = t1.register_id
+group by t1.category, t1.reason
+order by category
+-- inner join ref_account_status ac on ac.account_id = t1.account_id
+-- left outer join ref_readings_internal_valid v on v.account_id = t1.account_id and v.register_id = t1.register_id
 
-where upper(trim(ac.status)) = 'LIVE'
-and t1.reason = 'Not Enough reads for calculation'
+-- where upper(trim(ac.status)) = 'LIVE'
+-- and t1.reason = 'Not Enough reads for calculation'
 
-select * from ref_readings_internal where account_id = 1884 and register_id = 2005;
+select * from ref_readings_internal_valid where account_id = 14859 and register_id = 20903;
+select * from ref_readings_internal where account_id = 14859 and register_id = 20903;
