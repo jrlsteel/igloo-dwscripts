@@ -165,7 +165,7 @@ select su.external_id                                       as account_id,
              when mpa_elec.attributes_attributename = 'Threshold.DailyConsumption'
                      then mpa_elec.attributes_attributevalue
                end)                                         as meterpoint_attribute_elec_thresh_daily_cons,
-    --Start of indciators
+    --Generic Indicator
        max(case
              when (mt_elec.meter_id is not null) then 1
              else 0 end) over (partition by su.external_id) as has_meterpoint_elec,
