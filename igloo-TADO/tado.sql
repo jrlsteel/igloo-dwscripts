@@ -29,7 +29,8 @@ select x1.user_id,
               tado_estimate_mean_internal_temp(coalesce(x1.base_temp, 0.0), coalesce(x1.base_hours, 0.0))
               ) /
           tado_estimate_mean_internal_temp(coalesce(x1.base_temp, 0.0), coalesce(x1.base_hours, 0.0))
-            ) * aq * (unit_Rate / 100))                                                                        savings_in_pounds
+            ) * aq * (unit_Rate / 100))                                                                        savings_in_pounds,
+       current_timestamp as etl_change
 
     --Model 2nd Level Inputs
 from (select x.user_id,
