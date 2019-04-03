@@ -1,9 +1,19 @@
 --Batch SQL for igloo-TADO
 --Model Outputs and Calculations
-select x1.*,
+select x1.user_id,
+       x1.account_id,
+       x1.base_temp,
+       x1.heating_control,
+       x1.heating_basis,
+       x1.heating_type,
+       x1.heating_source  as fuel_type,
+       x1.status,
+       x1.estimated_temp,
+       x1.base_hours,
+       x1.estimate_hours,
        tado_estimate_mean_internal_temp(coalesce(x1.base_temp, 0.0), coalesce(x1.base_hours, 0.0))          as base_mit,
        tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimate_hours, 0.0)) as est_mit,
-       aq                                                                                                   as AQ,
+       aq                                                                                                   as est_annual_fuel,
        unit_Rate                                                                                            as unit_rate,
        aq * unit_Rate / 100                                                                                    amount_over_year,
        (
@@ -21,7 +31,7 @@ select x1.*,
           tado_estimate_mean_internal_temp(coalesce(x1.base_temp, 0.0), coalesce(x1.base_hours, 0.0))
             ) * aq * (unit_Rate / 100))                                                                        savings_in_pounds
 
---Model 2nd Level Inputs
+    --Model 2nd Level Inputs
 from (select x.user_id,
              x.account_id,
              cast(max(x.temperature_preference) as double precision)         base_temp,
@@ -38,7 +48,7 @@ from (select x.user_id,
                                            max(x.heating_basis))          as estimated_temp,
              tado_estimate_heating_hours(max(x.heating_type), 'base')     as base_hours,
              tado_estimate_heating_hours(max(x.heating_type), 'estimate') as estimate_hours
-      -- Model Inputs
+    -- Model Inputs
       from (select u.id                      as user_id,
                    su.external_id            as account_id,
                    att.id                    as attribute_type_id,
