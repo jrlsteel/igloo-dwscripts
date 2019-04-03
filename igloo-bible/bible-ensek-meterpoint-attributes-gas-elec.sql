@@ -915,11 +915,12 @@ from ref_cdb_supply_contracts su --inner join temp_cab_dates_quarter4_2018 we on
             mt_gas.removeddate is null
        left outer join ref_registers reg_gas on mt_gas.account_id = reg_gas.account_id and
                                                 mt_gas.meter_id = reg_gas.meter_id --left outer join ref_registers_attributes rga_elec on reg_elec.register_id = rga_elec.register_id
-
          --Status
        left outer join ref_account_status ac on ac.account_id = su.external_id
-       left outer join ref_registrations_status_gas rsg on mp_elec.account_id = rsg.account_id
-       left outer join ref_registrations_status_elec rse on mp_elec.account_id = rse.account_id
+       left outer join ref_registrations_meterpoints_status_gas rsg
+         on mp_gas.account_id = rsg.account_id and mp_gas.meter_point_id = rsg.meterpoint_id
+       left outer join ref_registrations_meterpoints_status_elec rse
+         on mp_elec.account_id = rse.account_id and mp_elec.meter_point_id = rse.meterpoint_id
 
 group by su.external_id,
          rcup.user_id,
