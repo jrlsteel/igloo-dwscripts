@@ -6,7 +6,7 @@ select x1.user_id,
        x1.heating_control,
        x1.heating_basis,
        x1.heating_type,
-       x1.heating_source  as fuel_type,
+       x1.heating_source                                                                                    as fuel_type,
        x1.status,
        x1.estimated_temp,
        x1.base_hours,
@@ -93,11 +93,11 @@ from (select x.user_id,
                    inner join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
                    inner join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
                    inner join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
-             where --su.external_id = 5918
---               and
---     u.id = 24 and
-                  att.attribute_name in
-                  ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
+            where --su.external_id = 5918
+                --               and
+                --     u.id = 24 and
+                att.attribute_name in
+                ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
 -- group by u.id, su.external_id
            -- limit 100
            ) x
@@ -110,36 +110,6 @@ from (select x.user_id,
              left outer join ref_cdb_quotes q on q.user_id = x.user_id
       group by x.user_id,
                x.account_id) x1;
-select count(*)
-from ref_cdb_survey_response
-where status = 'declined';
-
-select av.attribute_value
-from ref_cdb_supply_contracts su
-       inner join ref_cdb_user_permissions up on su.id = up.permissionable_id and permission_level = 0
-                                                   and permissionable_type = 'App\\SupplyContract'
-       inner join ref_cdb_users u on u.id = up.user_id
-       inner join ref_cdb_survey_response sr on sr.user_id = u.id
-       inner join ref_cdb_surveys s on s.id = sr.survey_id
-       inner join ref_cdb_survey_category sc on sc.survey_id = s.id
-       inner join ref_cdb_survey_questions sq on sq.survey_category_id = sc.id
-       inner join ref_cdb_attribute_types at on at.id = sq.attribute_type_id
-       inner join ref_cdb_attributes a on at.id = a.attribute_type_id and
-                                          (
-                                              (a.entity_id = sr.user_id AND a.entity_type = 'App\\User')
-                                                OR
-                                              (a.entity_id = su.supply_address_id AND a.entity_type = 'App\\Address')
-                                              )
-       left outer join ref_cdb_attribute_values av on av.id = a.attribute_value_id
-where attribute_name = 'heating_type'
-group by av.attribute_value
-order by av.attribute_value;
-
-select *
-from ref_cdb_attribute_types;
-select *
-from ref_cdb_survey_questions;
-
 
 
 
