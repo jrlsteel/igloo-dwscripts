@@ -48,7 +48,7 @@ from (select x.user_id,
                                            max(x.heating_basis))          as estimated_temp,
              tado_estimate_heating_hours(max(x.heating_type), 'base')     as base_hours,
              tado_estimate_heating_hours(max(x.heating_type), 'estimate') as estimate_hours
-    -- Model Inputs
+    -- Model 1st Level Inputs
       from (select u.id                      as user_id,
                    su.external_id            as account_id,
                    att.id                    as attribute_type_id,
@@ -93,8 +93,8 @@ from (select x.user_id,
                    inner join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
                    inner join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
                    inner join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
-            where su.external_id = 5918
-              and
+             where --su.external_id = 5918
+--               and
 --     u.id = 24 and
                   att.attribute_name in
                   ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
