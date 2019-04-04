@@ -3,8 +3,8 @@
 select x1.user_id,
        x1.account_id,
        x1.base_temp,
-       x1.heating_control,
        x1.heating_basis,
+       x1.heating_control,
        x1.fuel_type,
        x1.ages,
        x1.status,
@@ -111,8 +111,8 @@ from (
                    inner join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
                    inner join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
             where
---                   su.external_id = 35860
---                               and
+                  su.external_id = 35860
+                              and
                 --     u.id = 24 and
                 att.attribute_name in
                 ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
