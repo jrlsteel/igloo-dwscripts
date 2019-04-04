@@ -12,9 +12,9 @@ select x1.user_id,
        x1.base_temp_used,
        x1.estimated_temp,
        x1.base_hours,
-       x1.estimate_hours,
+       x1.estimated_hours,
        tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))          as base_mit,
-       tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimate_hours, 0.0)) as est_mit,
+       tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimated_hours, 0.0)) as estimated_mit,
        aq,
        gas_usage,
        est_annual_fuel_used,
@@ -22,14 +22,14 @@ select x1.user_id,
        est_annual_fuel_used * (unit_Rate + (unit_Rate * .05)) / 100                                                                                    amount_over_year,
        (
            (
-               tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimate_hours, 0.0)) -
+               tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimated_hours, 0.0)) -
                tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))
                ) /
            tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0)) * 100
         )                                                                                                as perc_diff,
        ((
           (
-              tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimate_hours, 0.0)) -
+              tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimated_hours, 0.0)) -
               tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))
               ) /
           tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))
@@ -59,7 +59,7 @@ from (
                                                      x.heating_control_type,
                                                      x.heating_basis)          as estimated_temp,
              tado_estimate_heating_hours(coalesce(x.family_category, ''), 'base')     as base_hours,
-             tado_estimate_heating_hours(coalesce(x.family_category, ''), 'estimate') as estimate_hours
+             tado_estimate_heating_hours(coalesce(x.family_category, ''), 'estimate') as estimated_hours
     -- Model 1st Level Inputs
       from (
       select       u.id                      as user_id,
