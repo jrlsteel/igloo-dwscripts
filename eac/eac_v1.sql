@@ -2,7 +2,7 @@
 delete from temp_ref_calculated_eac_v1;
 -- create table temp_ref_calculated_eac_v1
 --   DISTKEY(account_id) SORTKEY(account_id) as (
-insert into temp_ref_calculated_eac_v1
+-- insert into temp_ref_calculated_eac_v1
 -- select count(*) from (
 select st.account_id,
        st.elec_GSP,
@@ -17,7 +17,7 @@ select st.account_id,
        st.read_min_readings_elec                                              as read_min_readings_elec,
        st.read_max_readings_elec                                              as read_max_readings_elec,
        datediff(months, st.read_min_datetime_elec, st.read_max_datetime_elec) as read_months_diff_elec,
-       datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec)   as read_days_diff_elec,
+       coalesce(datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec), 0)   as read_days_diff_elec,
        st.ppc_count                                                           as no_of_ppc_rows,
        st.bpp_count                                                           as no_of_bpp_rows,
        st.read_consumption_elec,
@@ -58,7 +58,7 @@ from (select mp_elec.account_id                                                 
              max(read_valid.meterreadingdatetime)                                 as read_max_datetime_elec,
              min(read_valid.corrected_reading)                                    as read_min_readings_elec,
              max(read_valid.corrected_reading)                                    as read_max_readings_elec,
-             max(read_valid.corrected_reading) - min(read_valid.corrected_reading)as read_consumption_elec,
+             coalesce(max(read_valid.corrected_reading) - min(read_valid.corrected_reading), 0)as read_consumption_elec,
              rma_pcl.attributes_attributevalue                                    as profile_class,
              reg_elec.registers_tpr                                               as tpr,
              (select sum(ppc_sum)
@@ -95,8 +95,8 @@ from (select mp_elec.account_id                                                 
               group by gsp_group_id)                                              as bpp_count,
              2                                                                    as smooth_param,
              read_valid.total_reads                                               as total_reads,
-             read_valid.previous_eac                                              as previous_eac,
-             read_valid.latest_eac                                                as latest_eac
+             coalesce(read_valid.previous_eac, 0)                                              as previous_eac,
+             coalesce(read_valid.latest_eac, 0)                                                as latest_eac
       from ref_meterpoints mp_elec
              inner join ref_meterpoints_attributes rma_gsp on mp_elec.account_id = rma_gsp.account_id and mp_elec.meter_point_id = rma_gsp.meter_point_id and
                                                               rma_gsp.attributes_attributename = 'GSP'
@@ -130,13 +130,12 @@ from (select mp_elec.account_id                                                 
                                             and y.meterserialnumber = ee.serial_number and
                                           ee.effective_from = y.meterreadingdatetime
                               where y.n <= 2
---                                 and y.total_reads >= 4
                                 ) read_valid
                on read_valid.account_id = mp_elec.account_id and read_valid.register_id = reg_elec.register_id
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
---         and ac.account_id = 6988
+        and ac.account_id = 1831
         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
         and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
@@ -170,9 +169,8 @@ select st.account_id,
        st.read_min_readings_elec                                              as read_min_readings_elec,
        st.read_max_readings_elec                                              as read_max_readings_elec,
        datediff(months, st.read_min_datetime_elec, st.read_max_datetime_elec) as read_months_diff_elec,
-       datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec)   as read_days_diff_elec,
+       coalesce(datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec), 0)   as read_days_diff_elec,
        st.ppc_count                                                           as no_of_ppc_rows,
-       st.bpp_count                                                           as no_of_bpp_rows,
        st.read_consumption_elec,
        st.profile_class,
        st.tpr,
@@ -190,13 +188,6 @@ select st.account_id,
             round(calculate_eac_v1(coalesce(st.smooth_param, 0), coalesce(st.ppc, 0), coalesce(st.read_consumption_elec, 0),
                                coalesce(st.previous_eac, 0)), 1) end
         as igloo_eac_v1,
---        (case when ppc is null or no_of_ppc_rows < datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec) then
---             round(calculate_eac_v1(coalesce(st.smooth_param, 0), coalesce(st.bpp, 0), coalesce(st.read_consumption_elec, 0),
---                                coalesce(st.previous_eac, 0)), 1)
---        else
---               round(calculate_eac_v1(coalesce(st.smooth_param, 0), coalesce(st.ppc, 0), coalesce(st.read_consumption_elec, 0),
---                                coalesce(st.previous_eac, 0)), 1) end
---         )  - st.latest_eac                          as igloo_eac_v1_minus_industry_eac,
        getdate()                                                              as etlchange
 from (select mp_elec.account_id                                                   as account_id,
              mp_elec.meter_point_id                                               as meterpoint_id,
@@ -211,7 +202,7 @@ from (select mp_elec.account_id                                                 
              max(read_valid.meterreadingdatetime)                                 as read_max_datetime_elec,
              min(read_valid.corrected_reading)                                    as read_min_readings_elec,
              max(read_valid.corrected_reading)                                    as read_max_readings_elec,
-             max(read_valid.corrected_reading) - min(read_valid.corrected_reading)as read_consumption_elec,
+             coalesce (max(read_valid.corrected_reading) - min(read_valid.corrected_reading), 0) as read_consumption_elec,
              rma_pcl.attributes_attributevalue                                    as profile_class,
              reg_elec.registers_tpr                                               as tpr,
              (select sum(ppc_sum)
@@ -239,17 +230,10 @@ from (select mp_elec.account_id                                                 
                 and st_date >= trunc(min(read_valid.meterreadingdatetime))
                 and st_date < trunc(max(read_valid.meterreadingdatetime))
               group by gsp_group_id)                                              as bpp,
-              (select count(*)
-              from ref_d18_igloo_bpp
-              where gsp_group_id = rma_gsp.attributes_attributevalue
-                and pcl_id = cast(rma_pcl.attributes_attributevalue as integer) and pfl_id = 1
-                and st_date >= trunc(min(read_valid.meterreadingdatetime))
-                and st_date < trunc(max(read_valid.meterreadingdatetime))
-              group by gsp_group_id)                                              as bpp_count,
              2                                                                    as smooth_param,
              read_valid.total_reads                                               as total_reads,
-             read_valid.previous_eac                                              as previous_eac,
-             read_valid.latest_eac                                                as latest_eac
+             coalesce(read_valid.previous_eac, 0)                                as previous_eac,
+             coalesce(read_valid.latest_eac, 0)                                   as latest_eac
       from ref_meterpoints mp_elec
              inner join ref_meterpoints_attributes rma_gsp on mp_elec.account_id = rma_gsp.account_id and mp_elec.meter_point_id = rma_gsp.meter_point_id and
                                                               rma_gsp.attributes_attributename = 'GSP'
@@ -283,15 +267,14 @@ from (select mp_elec.account_id                                                 
                                             and y.meterserialnumber = ee.serial_number and
                                           ee.effective_from = y.meterreadingdatetime
                               where y.n <= 2
---                                 and y.total_reads >= 4
                                 ) read_valid
                on read_valid.account_id = mp_elec.account_id and read_valid.register_id = reg_elec.register_id
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
---         and ac.account_id = 1836
---         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
---         and upper(ac.status) = 'LIVE'
+        and ac.account_id = {0}
+        and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
+        and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
                mp_elec.meter_point_id,
                reg_elec.register_id,
@@ -334,7 +317,8 @@ $$;
 
 /*** EAC_v1 analysis ***/
 
-select t1.category, t1.reason,
+select
+t1.category, t1.reason,
  count(*)
  from (
 select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
@@ -375,7 +359,7 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
           end as bpp_used
 
 
-from temp_ref_calculated_eac_v1 t) t1
+from ref_calculated_eac_v1 t) t1
 group by t1.category, t1.reason
 order by category
 -- inner join ref_account_status ac on ac.account_id = t1.account_id
@@ -384,5 +368,10 @@ order by category
 -- where upper(trim(ac.status)) = 'LIVE'
 -- and t1.reason = 'Not Enough reads for calculation'
 
-select * from ref_readings_internal_valid where account_id = 14859 and register_id = 20903;
+select * from ref_readings_internal_valid where account_id = 1854 ;
 select * from ref_readings_internal where account_id = 14859 and register_id = 20903;
+
+select * from ref_estimates_elec_internal where account_id = 1857;
+
+select * from ref_meterpoints;
+

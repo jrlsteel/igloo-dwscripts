@@ -3,7 +3,7 @@ from ref_calculated_aq_v1;
 -- drop table temp_ref_calculated_aq;
 -- create table ref_calculated_aq_v1 as
 -- insert into ref_calculated_aq_v1
-
+-- AQ V1 batch--
 select * from (
 select st.account_id,
        st.gas_LDZ,
@@ -229,10 +229,15 @@ where y.min_readings_datetime > '2017-10-01' and y.meterpointtype = 'G' and acco
 
 select * from temp_ref_readings_internal_valid where account_id = 6304
 
-
 select eg.*,
        dateadd(month, datediff(month,0,getdate())-1,0),
        dense_rank() over (partition by account_id, mprn, register_id, serial_number order by effective_from desc)
 from ref_estimates_gas_internal eg;
 
 select add_months(last_day(getdate()), -2) + 10;
+
+select * from ref_meterpoints where meter_point_id = 2101;
+select * from ref_meterpoints where meterpointnumber = 2000007809594;
+
+select status, count(*) from ref_account_status group by status
+select status from ref_registrations_meterpoints_status_elec group by status;
