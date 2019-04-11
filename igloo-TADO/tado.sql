@@ -1,5 +1,8 @@
 --Batch SQL for igloo-TADO
 --Model Outputs and Calculations
+drop table ref_calculated_tado_efficiency_batch;
+
+create table ref_calculated_tado_efficiency_batch as
 select x1.user_id,
        x1.account_id,
        x1.base_temp,
@@ -16,8 +19,7 @@ select x1.user_id,
        tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0)) as base_mit,
        tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0),
                                         coalesce(x1.estimated_hours, 0.0))                              as estimated_mit,
-       aq,
-       gas_usage,
+       est_annual_source,
        est_annual_fuel_used,
        (unit_Rate + (unit_Rate * .05)) / 100                                                            as unit_rate_with_vat,
        est_annual_fuel_used * (unit_Rate + (unit_Rate * .05)) / 100                                        amount_over_year,
@@ -71,8 +73,7 @@ from (select x.user_id,
              case when x.ages = '' then 'unknown' else x.ages end                     as ages,
              x.status                                                                 as status,
              coalesce(tf.rate, 0)                                                     as unit_Rate,
-             x.aq,
-             x.gas_usage,
+             case when x.aq = 0 then 2  else 1 end                                    as est_annual_source,
              case when x.aq = 0 then x.gas_usage else x.aq end                        as est_annual_fuel_used,
              tado_estimate_setpoint_impact(case
                                              when x.base_temp <= 0 then x.default_base_temp
@@ -137,8 +138,7 @@ from (select x.user_id,
                    inner join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
                    inner join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
                    inner join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
-            where su.external_id = 1831
-              and
+            where
                 --     u.id = 24 and
                   att.attribute_name in
                   ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
