@@ -6,6 +6,8 @@ create table ref_calculated_tado_efficiency_reporting
 
     SELECT rcte.user_id                                         as user_id,
            su.external_id                                       as account_id,
+           rcte.supply_address_id,
+           rcte.postcode,
            ref_cdb_registrations.marketing                      as marketing_optin,
            ac.status                                            as account_status,
            mp_elec.meterpointtype                               as meterpoint_type_elec,
@@ -94,6 +96,8 @@ create table ref_calculated_tado_efficiency_reporting
              on mp_elec.account_id = rse.account_id and mp_elec.meter_point_id = rse.meterpoint_id
     group by rcte.user_id,
              su.external_id,
+             rcte.supply_address_id,
+             rcte.postcode,
              ref_cdb_registrations.marketing,
              rcte.base_temp,
              rcte.heating_basis,

@@ -5,6 +5,8 @@ drop table ref_calculated_tado_efficiency_batch;
 create table ref_calculated_tado_efficiency_batch as
  select x1.user_id,
                    x1.account_id,
+                   x1.supply_address_id,
+                   x1.postcode,
                    x1.base_temp,
                    x1.heating_basis,
                    x1.heating_control,
@@ -60,6 +62,8 @@ create table ref_calculated_tado_efficiency_batch as
                 --Model 2nd Level Inputs
             from (select x.user_id,
                          x.account_id,
+                         x.supply_address_id,
+                         x.postcode,
                          x.base_temp,
                          case
                            when x.base_temp <= 0 then x.default_base_temp
@@ -87,6 +91,8 @@ create table ref_calculated_tado_efficiency_batch as
                 -- Model 1st Level Inputs
                   from (select u.id                                            as user_id,
                                su.external_id                                  as account_id,
+                               su.supply_address_id                            as supply_address_id,
+                               addr.postcode                                   as postcode,
                                cast(max(case
                                           when att.attribute_name = 'temperature_preference' then av.attribute_value
                                           else '-99' end) as double precision) as base_temp,
@@ -124,6 +130,7 @@ create table ref_calculated_tado_efficiency_batch as
                                          order by q.updated_at desc
                                          limit 1), 0)                          as gas_usage
                         from ref_cdb_supply_contracts su
+                               inner join ref_cdb_addresses addr on su.supply_address_id = addr.id
                                inner join ref_cdb_user_permissions up on su.id = up.permissionable_id and permission_level = 0
                                                                            and permissionable_type = 'App\\SupplyContract'
                                inner join ref_cdb_users u on u.id = up.user_id
@@ -144,6 +151,6 @@ create table ref_calculated_tado_efficiency_batch as
                             --     u.id = 24 and
                               att.attribute_name in
                               ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
-                        group by u.id, su.external_id) x
+                        group by u.id, su.external_id, su.supply_address_id,  addr.postcode) x
                          left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null) x1;
 
