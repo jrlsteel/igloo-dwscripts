@@ -1,18 +1,21 @@
 --Batch SQL for igloo-TADO
 --Model Outputs and Calculations
-drop table ref_calculated_tado_efficiency_batch;
+-- drop table ref_calculated_tado_efficiency_batch;
 
-create table ref_calculated_tado_efficiency_batch as
- select x1.user_id,
+-- create table ref_calculated_tado_efficiency_batch as
+
+select x1.user_id,
                    x1.account_id,
                    x1.supply_address_id,
                    x1.postcode,
+                   x1.fuel_type,
                    x1.base_temp,
                    x1.heating_basis,
                    x1.heating_control,
                    x1.heating_source,
                    x1.ages,
-                   x1.status,
+                   x1.mmh_status,
+                   x1.mmh_tado_status,
                    x1.family_category,
                    x1.base_temp_used,
                    x1.estimated_temp,
@@ -42,7 +45,8 @@ create table ref_calculated_tado_efficiency_batch as
                         tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))
                         ) * est_annual_fuel_used *
                     ((unit_Rate + (unit_Rate * .05)) / 100))                                                           savings_in_pounds,
-                   tado_savings_segmentation(x1.base_temp,
+                   tado_savings_segmentation(
+                                             x1.base_temp,
                                              x1.heating_basis,
                                              x1.heating_control,
                                              x1.family_category,
@@ -77,7 +81,14 @@ create table ref_calculated_tado_efficiency_batch as
                            else x.family_category end                                             as family_category,
                          case when x.heating_source = '' then 'unknown' else x.heating_source end as heating_source,
                          case when x.ages = '' then 'unknown' else x.ages end                     as ages,
-                         x.status                                                                 as status,
+                         (case when x.status is null
+                           then 'nodata' else
+                          case when x.base_temp <= 0 or heating_control_type = '' or x.heating_basis = '' or x.family_category = '' or
+                                x.heating_source = '' or x.ages = ''
+                           then 'incomplete' else
+                                'complete' end end)                                               as mmh_tado_status,
+                         x.status                                                                 as mmh_status,
+                         x.fuel_type,
                          coalesce(tf.rate, 0)                                                     as unit_Rate,
                          case when x.aq = 0 then 2  else 1 end                                    as est_annual_source,
                          case when x.aq = 0 then x.gas_usage else x.aq end                        as est_annual_fuel_used,
@@ -106,6 +117,8 @@ create table ref_calculated_tado_efficiency_batch as
                                max(case
                                      when att.attribute_name = 'heating_type' then av.attribute_value
                                      else '' end)                              as heating_source,
+                               (select listagg(distinct mp.meterpointtype,',') from ref_meterpoints mp where account_id = su.external_id
+                               group by account_id)                            as fuel_type,
                                coalesce(max(at.attribute_custom_value), '')    as ages,
                                max(sr.status)                                  as status,
                                max(case
@@ -134,23 +147,23 @@ create table ref_calculated_tado_efficiency_batch as
                                inner join ref_cdb_user_permissions up on su.id = up.permissionable_id and permission_level = 0
                                                                            and permissionable_type = 'App\\SupplyContract'
                                inner join ref_cdb_users u on u.id = up.user_id
-                               inner join ref_cdb_attributes at on (
+                               left outer join ref_cdb_attributes at on (
                                                                        (at.entity_id = up.user_id AND at.entity_type = 'App\\User')
                                                                          OR
                                                                        (at.entity_id = su.supply_address_id AND at.entity_type = 'App\\Address')
                                                                        )
                                                                      and at.effective_to is null
-                               inner join ref_cdb_attribute_types att on att.id = at.attribute_type_id and att.effective_to is null
+                               left outer join ref_cdb_attribute_types att on att.id = at.attribute_type_id and att.effective_to is null
                                left outer join ref_cdb_attribute_values av
                                  on av.attribute_type_id = at.attribute_type_id and at.attribute_value_id = av.id
                                       and at.attribute_value_id is not null
-                               inner join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
-                               inner join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
-                               inner join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
+                               left outer join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
+                               left outer join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
+                               left outer join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
                         where
-                            --     u.id = 24 and
-                              att.attribute_name in
+                              su.external_id = 1835 and
+                              (att.attribute_name in
                               ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
+                              or sr.id is null)
                         group by u.id, su.external_id, su.supply_address_id,  addr.postcode) x
-                         left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null) x1;
-
+                         left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null) x1
