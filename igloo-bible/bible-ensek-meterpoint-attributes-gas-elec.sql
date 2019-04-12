@@ -1,3 +1,5 @@
+create table ref_calculated_account_meterpoints
+as
 select su.external_id                                       as account_id,
        rcup.user_id                                         as igloo_user_id,
        rca.postcode                                         as supply_postcode,
@@ -73,9 +75,6 @@ select su.external_id                                       as account_id,
                end)                                         as meterpoint_attribute_elec_is_cot,
        max(case
              when mpa_elec.attributes_attributename = 'IsPrepay' then mpa_elec.attributes_attributevalue
-               end)                                         as meterpoint_attribute_elec_is_prepay,
-       max(case
-             when mpa_elec.attributes_attributename = 'isPrepay' then mpa_elec.attributes_attributevalue
                end)                                         as meterpoint_attribute_elec_is_prepay,
        max(case
              when mpa_elec.attributes_attributename = 'LLF Indicator' then mpa_elec.attributes_attributevalue
@@ -258,9 +257,6 @@ select su.external_id                                       as account_id,
              when mpa_gas.attributes_attributename = 'Transporter' then mpa_gas.attributes_attributevalue
                end)                                         as meterpoint_attribute_gas_transporter,
        max(case
-             when mpa_gas.attributes_attributename = 'igtIndicator' then mpa_gas.attributes_attributevalue
-               end)                                         as meterpoint_attribute_gas_igt_indicator,
-       max(case
              when mpa_gas.attributes_attributename = 'isPrepay' then mpa_gas.attributes_attributevalue
                end)                                         as meterpoint_attribute_gas_isPrePay,
     --Generic Indicator
@@ -398,14 +394,6 @@ select su.external_id                                       as account_id,
        max(case
              when max(case
                         when (mpa_elec.attributes_attributename = 'IsPrepay' and
-                              mpa_elec.attributes_attributevalue is not null)
-                                then 1
-                        else 0
-                          end) > 0 then 1
-             else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_elec_is_prepay,
-       max(case
-             when max(case
-                        when (mpa_elec.attributes_attributename = 'isPrepay' and
                               mpa_elec.attributes_attributevalue is not null)
                                 then 1
                         else 0
@@ -629,14 +617,6 @@ select su.external_id                                       as account_id,
              else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_elec_supplier,
        max(case
              when max(case
-                        when (mpa_elec.attributes_attributename = 'Supply_Status' and
-                              mpa_elec.attributes_attributevalue is not null)
-                                then 1
-                        else 0
-                          end) > 0 then 1
-             else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_elec_supply_status,
-       max(case
-             when max(case
                         when (mpa_elec.attributes_attributename = 'Threshold.DailyConsumption'
                                 and mpa_elec.attributes_attributevalue is not null)
                                 then 1
@@ -762,14 +742,6 @@ select su.external_id                                       as account_id,
                         else 0
                           end) > 0 then 1
              else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_gas_no_of_digits,
-       max(case
-             when max(case
-                        when (mpa_gas.attributes_attributename = 'IGT Indicator' and
-                              mpa_gas.attributes_attributevalue is not null)
-                                then 1
-                        else 0
-                          end) > 0 then 1
-             else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_gas_igt_indicator,
        max(case
              when max(case
                         when (mpa_gas.attributes_attributename = 'LDZ' and
