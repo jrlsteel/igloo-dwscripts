@@ -163,7 +163,7 @@ select x1.user_id,
                               su.external_id = 1831 and
                               (att.attribute_name in
                               ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type',
-                              'heating_type', 'house_bedrooms', 'house_type', 'house_age', )
+                               )
                               or sr.user_id is null)
                               and sr.survey_id = 1
                         group by u.id, su.external_id, su.supply_address_id,  addr.postcode) x
