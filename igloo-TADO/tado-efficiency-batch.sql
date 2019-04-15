@@ -14,7 +14,6 @@ select x1.user_id,
                    x1.heating_control,
                    x1.heating_source,
                    x1.ages,
-                   x1.mmh_status,
                    x1.mmh_tado_status,
                    x1.family_category,
                    x1.base_temp_used,
@@ -36,7 +35,7 @@ select x1.user_id,
                            tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0))
                            ) /
                        tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0), coalesce(x1.base_hours, 0.0)) * 100
-                       )                                                                                            as perc_diff,
+                   )                                                                                            as perc_diff,
                    ((
                         (
                             tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0), coalesce(x1.estimated_hours, 0.0)) -
@@ -46,10 +45,9 @@ select x1.user_id,
                         ) * est_annual_fuel_used *
                     ((unit_Rate + (unit_Rate * .05)) / 100))                                                           savings_in_pounds,
                    tado_savings_segmentation(
-                                             x1.base_temp,
-                                             x1.heating_basis,
+                                             x1.mmh_tado_status,
+                                             x1.fuel_type,
                                              x1.heating_control,
-                                             x1.family_category,
                                              x1.heating_source,
                                              ((
                                                   (
@@ -81,13 +79,12 @@ select x1.user_id,
                            else x.family_category end                                             as family_category,
                          case when x.heating_source = '' then 'unknown' else x.heating_source end as heating_source,
                          case when x.ages = '' then 'unknown' else x.ages end                     as ages,
-                         (case when x.status is null
+                         (case when x.sr_user_id is null
                            then 'nodata' else
                           case when x.base_temp <= 0 or heating_control_type = '' or x.heating_basis = '' or x.family_category = '' or
                                 x.heating_source = '' or x.ages = ''
                            then 'incomplete' else
                                 'complete' end end)                                               as mmh_tado_status,
-                         x.status                                                                 as mmh_status,
                          x.fuel_type,
                          coalesce(tf.rate, 0)                                                     as unit_Rate,
                          case when x.aq = 0 then 2  else 1 end                                    as est_annual_source,
@@ -104,6 +101,7 @@ select x1.user_id,
                                su.external_id                                  as account_id,
                                su.supply_address_id                            as supply_address_id,
                                addr.postcode                                   as postcode,
+                               max(sr.user_id) as sr_user_id,
                                cast(max(case
                                           when att.attribute_name = 'temperature_preference' then av.attribute_value
                                           else '-99' end) as double precision) as base_temp,
@@ -117,10 +115,10 @@ select x1.user_id,
                                max(case
                                      when att.attribute_name = 'heating_type' then av.attribute_value
                                      else '' end)                              as heating_source,
-                               (select listagg(distinct mp.meterpointtype,',') from ref_meterpoints mp where account_id = su.external_id
-                               group by account_id)                            as fuel_type,
+                               (select listagg(distinct mp.meterpointtype) from ref_meterpoints mp
+                                        where account_id = su.external_id and (mp.supplyenddate is null or mp.supplyenddate >= getdate())
+                                        group by account_id)                   as fuel_type,
                                coalesce(max(at.attribute_custom_value), '')    as ages,
-                               max(sr.status)                                  as status,
                                max(case
                                      when att.attribute_name = 'resident_ages'
                                              then tado_heating_summary(coalesce(at.attribute_custom_value, ''))
@@ -159,11 +157,14 @@ select x1.user_id,
                                       and at.attribute_value_id is not null
                                left outer join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
                                left outer join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
-                               left outer join ref_cdb_survey_response sr on sr.user_id = up.user_id and sr.survey_id = sc.survey_id
+                               left outer join (select user_id, survey_id from ref_cdb_survey_response group by user_id, survey_id) sr
+                                          on sr.user_id = up.user_id
                         where
-                              su.external_id = 1835 and
+                              su.external_id = 1831 and
                               (att.attribute_name in
-                              ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type')
-                              or sr.id is null)
+                              ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type',
+                              'heating_type', 'house_bedrooms', 'house_type', 'house_age', )
+                              or sr.user_id is null)
+                              and sr.survey_id = 1
                         group by u.id, su.external_id, su.supply_address_id,  addr.postcode) x
                          left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null) x1
