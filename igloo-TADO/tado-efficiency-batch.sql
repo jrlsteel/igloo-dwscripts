@@ -162,7 +162,7 @@ select x1.user_id,
                         where
                               su.external_id = 1831 and
                               (att.attribute_name in
-                              ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type',
+                              ('resident_ages', 'heating_control_type', 'temperature_preference', 'heating_basis', 'heating_type'
                                )
                               or sr.user_id is null)
                               and sr.survey_id = 1
