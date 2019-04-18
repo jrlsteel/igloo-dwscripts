@@ -1,11 +1,10 @@
 --Batch SQL for igloo-TADO
 --Model Outputs and Calculations
--- drop table ref_calculated_tado_efficiency_batch;
+drop table ref_calculated_tado_efficiency_batch;
 
-create table temp_ref_calculated_tado_efficiency_batch as
-
+insert into ref_calculated_tado_efficiency_batch
+(
 select
-
 x2.user_id,
 x2.account_id,
 x2.supply_address_id,
@@ -13,11 +12,14 @@ x2.postcode,
 x2.fuel_type,
 x2.base_temp,
 x2.heating_basis,
-x2.heating_control,
+x2.heating_control_type,
 x2.heating_source,
+x2.house_bedrooms,
+x2.house_type,
+x2.house_age,
 x2.ages,
-x2.mmh_tado_status,
 x2.family_category,
+x2.mmh_tado_status,
 x2.base_temp_used,
 x2.estimated_temp,
 x2.base_hours,
@@ -39,24 +41,30 @@ case
    when x2.mmh_tado_status in ('nodata', 'incomplete') then
      'avg_perc'
    else 'tado_perc'
-     end                                       as savings_perc_source,
+     end                                                                                        as savings_perc_source,
 
-x2.annual_consumption * x2.unit_rate_with_vat as amount_over_year,
+x2.annual_consumption * x2.unit_rate_with_vat                                                   as amount_over_year,
 
 case
    when x2.mmh_tado_status in ('nodata', 'incomplete') then
      (x2.annual_consumption * x2.unit_rate_with_vat * x2.avg_savings_perc) / 100
    else
      (x2.annual_consumption * x2.unit_rate_with_vat * x2.savings_perc) / 100
-     end                                       as savings_in_pounds,
-       tado_savings_segmentation(
-         x2.mmh_tado_status,
-         x2.fuel_type,
-         x2.heating_control,
-         x2.heating_source,
-         x2.annual_consumption)                      as segment,
-       getdate()                                     as etlchange
-
+     end                                                                                        as savings_in_pounds,
+ tado_savings_segmentation(
+   x2.mmh_tado_status,
+   x2.fuel_type,
+   x2.heating_control_type,
+   x2.heating_source,
+  (case
+   when x2.mmh_tado_status in ('nodata', 'incomplete') then
+     (x2.annual_consumption * x2.unit_rate_with_vat * x2.avg_savings_perc) / 100
+   else
+     (x2.annual_consumption * x2.unit_rate_with_vat * x2.savings_perc) / 100
+     end
+   ))                                                                                            as segment,
+       getdate()                                                                                as etlchange
+      --Model 3rd Level Inputs
 from (select x1.*,
              tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0),
                                               coalesce(x1.base_hours, 0.0))                      as base_mit,
@@ -111,33 +119,34 @@ from (select x1.*,
                else case
                       when x1.heating_source = 'oilboiler' then 'oil'
                       else 'gas' end end                                                         as unit_rate_source
-    --Model 2nd Level Inputs
+      --Model 2nd Level Inputs
       from (select x.user_id,
                    x.account_id,
                    x.supply_address_id,
                    x.postcode,
                    x.base_temp,
-                   x.house_bedrooms,
-                   x.house_type,
-                   x.house_age,
                    case
                      when x.base_temp <= 0 then x.default_base_temp
                      else x.base_temp end                                                   as base_temp_used,
                    case
                      when heating_control_type = '' then 'unknown'
-                     else x.heating_control_type end                                        as heating_control,
+                     else x.heating_control_type end                                        as heating_control_type,
                    case when x.heating_basis = '' then 'unknown' else x.heating_basis end   as heating_basis,
                    case
-                     when x.family_category = '' then 'unknown'
+                     when x.family_category = '' or x.family_category='unknown' then 'unknown'
                      else x.family_category end                                             as family_category,
                    case when x.heating_source = '' then 'unknown' else x.heating_source end as heating_source,
+                   case when x.house_bedrooms = '' then 'unknown' else x.house_bedrooms end as house_bedrooms,
+                   case when x.house_type = '' then 'unknown' else x.house_type end as house_type,
+                   case when x.house_age = '' then 'unknown' else x.house_age end as house_age,
+
                    case when x.ages = '' then 'unknown' else x.ages end                     as ages,
                    (case
                       when x.sr_user_id is null
                               then 'nodata'
                       else case
                              when x.base_temp <= 0 or heating_control_type = '' or x.heating_basis = '' or
-                                  x.family_category = '' or
+                                  x.family_category in ('','unknown') or
                                   x.heating_source = '' or x.ages = ''
                                      then 'incomplete'
                              else 'complete' end end)                                       as mmh_tado_status,
@@ -149,6 +158,7 @@ from (select x1.*,
                                                  x.heating_basis)                           as estimated_temp,
                    tado_estimate_heating_hours(coalesce(x.family_category, ''), 'base')     as base_hours,
                    tado_estimate_heating_hours(coalesce(x.family_category, ''), 'estimate') as estimated_hours,
+
                    tado_get_heating_source(coalesce(x.heating_source, ''))                  as mmhkw_heating_source,
                    tado_get_prop_floor_area_band(coalesce(x.house_bedrooms, ''),
                                                  coalesce(x.house_type, ''))                as mmhkw_floor_area_band,
@@ -175,8 +185,7 @@ from (select x1.*,
                              where r.id = x.account_id
                              order by q.updated_at desc
                              limit 1), 0)                                                   as gas_usage
-
-          -- Model 1st Level Inputs
+      -- Model 1st Level Inputs
             from (select u.id                                            as user_id,
                          su.external_id                                  as account_id,
                          su.supply_address_id                            as supply_address_id,
@@ -250,29 +259,99 @@ from (select x1.*,
                   group by u.id, su.external_id, su.supply_address_id, addr.postcode) x
                    left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null
                    left outer join ref_cdb_mmh_need_postcode_lookup mmhpc
-                     on mmhpc.outcode = left(x.postcode, len(postcode) - 3)) x1) x2;
+                     on mmhpc.outcode = left(x.postcode, len(postcode) - 3)) x1) x2
+)
+;
 
+drop table ref_calculated_tado_efficiency_batch;
 
+create table ref_calculated_tado_efficiency_batch
+(
+	user_id bigint,
+	account_id bigint distkey,
+	supply_address_id bigint,
+	postcode varchar(255),
+	fuel_type varchar(65535),
+	base_temp double precision,
+	heating_basis varchar(255),
+	heating_control_type varchar(255),
+	heating_source varchar(255),
+	house_bedrooms varchar(255),
+	house_type varchar(255),
+	house_age varchar(255),
+	ages varchar(65535),
+	family_category varchar(500),
+	mmh_tado_status varchar(255),
+	base_temp_used double precision,
+	estimated_temp double precision,
+	base_hours double precision,
+	estimated_hours double precision,
+	base_mit double precision,
+	estimated_mit double precision,
+	mmhkw_heating_source varchar(255),
+	mmhkw_floor_area_band integer,
+	mmhkw_prop_age_id integer,
+	mmhkw_prop_type_id integer,
+	region_id integer,
+	annual_consumption double precision,
+	annual_consumption_source varchar(255),
+	unit_rate_with_vat double precision,
+	unit_rate_source varchar(255),
+	savings_perc double precision,
+	avg_savings_perc double precision,
+	savings_perc_source varchar(255),
+	amount_over_year double precision,
+	savings_in_pounds double precision,
+	segment integer,
+	etlchange timestamp
+)
+diststyle key
+;
 
+alter table ref_calculated_tado_efficiency_batch owner to igloo
+;
 
+drop table ref_calculated_tado_efficiency_audit;
 
-select * from ref_meterpoints where account_id = 15559;
-
-select
-       avg(savings_perc)            as avg_perc_diff,
-       avg(savings_in_pounds)    as avg_savings_in_pounds,
-       stddev(savings_perc)         as stdev_perc_diff,
-       stddev(savings_in_pounds) as stdev_savings_in_pounds,
-       getdate()                    etlchange
-from temp_ref_calculated_tado_efficiency_batch
-where savings_perc < 0
-  and mmh_tado_status = 'complete'
-  and annual_consumption > 0
-  and unit_rate_with_vat > 0;
-
-select count(*) from temp_ref_calculated_tado_efficiency_batch v
-    inner join ref_meterpoints mp on mp.account_id = v.account_id and mp.supplyenddate is null
-inner join ref_account_status ac on ac.account_id= v.account_id
-where segment = -1 and ac.status = 'Live';
-
-select * from temp_ref_calculated_tado_efficiency_batch_v1;
+create table ref_calculated_tado_efficiency_audit
+(
+	user_id bigint,
+	account_id bigint distkey,
+	supply_address_id bigint,
+	postcode varchar(255),
+	fuel_type varchar(65535),
+	base_temp double precision,
+	heating_basis varchar(255),
+	heating_control_type varchar(255),
+	heating_source varchar(255),
+	house_bedrooms varchar(255),
+	house_type varchar(255),
+	house_age varchar(255),
+	ages varchar(65535),
+	family_category varchar(500),
+	mmh_tado_status varchar(255),
+	base_temp_used double precision,
+	estimated_temp double precision,
+	base_hours double precision,
+	estimated_hours double precision,
+	base_mit double precision,
+	estimated_mit double precision,
+	mmhkw_heating_source varchar(255),
+	mmhkw_floor_area_band integer,
+	mmhkw_prop_age_id integer,
+	mmhkw_prop_type_id integer,
+	region_id integer,
+	annual_consumption double precision,
+	annual_consumption_source varchar(255),
+	unit_rate_with_vat double precision,
+	unit_rate_source varchar(255),
+	savings_perc double precision,
+	avg_savings_perc double precision,
+	savings_perc_source varchar(255),
+	amount_over_year double precision,
+	savings_in_pounds double precision,
+	segment integer,
+	etlchange timestamp
+)
+diststyle key
+;
