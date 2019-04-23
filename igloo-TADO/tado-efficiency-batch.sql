@@ -2,8 +2,8 @@
 --Model Outputs and Calculations
 drop table ref_calculated_tado_efficiency_batch;
 
-insert into ref_calculated_tado_efficiency_batch
-(
+-- insert into ref_calculated_tado_efficiency_batch
+-- (
 select
 x2.user_id,
 x2.account_id,
@@ -246,7 +246,7 @@ from (select x1.*,
                                           where survey_id = 1
                                           group by user_id, survey_id) sr on sr.user_id = up.user_id
                   where
---                       su.external_id = 1831 and
+                      su.external_id = 1831 and
                      (att.attribute_name in ('resident_ages',
                                                 'heating_control_type',
                                                 'temperature_preference',
@@ -260,7 +260,7 @@ from (select x1.*,
                    left outer join ref_tariff_history_gas_ur tf on tf.account_id = x.account_id and tf.end_date is null
                    left outer join ref_cdb_mmh_need_postcode_lookup mmhpc
                      on mmhpc.outcode = left(x.postcode, len(postcode) - 3)) x1) x2
-)
+-- )
 ;
 
 drop table ref_calculated_tado_efficiency_batch;
