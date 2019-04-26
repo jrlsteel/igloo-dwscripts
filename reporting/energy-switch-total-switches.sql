@@ -3,8 +3,10 @@
 
 
 -- 24-04-2019
+-- 26-04-2019 Added  datediff(days,association_start_wl_1, wl0_transposed_date) as new_switch_days_asw11_and_w10td
 select ens.*,
-      datediff(days,wl0_transposed_date, supply_start_date) as new_switch_days_wl_0
+      datediff(days,wl0_transposed_date, supply_start_date) as new_switch_days_wl_0,
+      datediff(days,association_start_wl_1, wl0_transposed_date) as new_switch_days_asw11_and_w10td
 
 --        sum(case when switch_days_wl_0 > 21 then 1 else 0 end) as greater_than_21,
 --        sum(case when switch_days_wl_0 < 21 then 1 else 0 end) as less_than_21,
