@@ -62,7 +62,7 @@ from (select mp_elec.account_id                                                 
              rma_pcl.attributes_attributevalue                                    as profile_class,
              reg_elec.registers_tpr                                               as tpr,
              (select sum(ppc_sum)
-              from ref_d18_igloo_ppc
+              from ref_d18_igloo_ppc_bak_26042019
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -71,7 +71,7 @@ from (select mp_elec.account_id                                                 
                 and st_date < trunc(max(read_valid.meterreadingdatetime))
               group by gsp_group_id, ss_conf_id)                                  as ppc,
               (select count(*)
-              from ref_d18_igloo_ppc
+              from ref_d18_igloo_ppc_bak_26042019
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -123,7 +123,7 @@ from (select mp_elec.account_id                                                 
                               from (select r.*,
                                            dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
                                            count(*) over (partition by account_id, register_id)                                        total_reads
-                                    from ref_readings_internal_valid r) y
+                                    from ref_readings_internal_valid_bak_26042019 r) y
                                      left outer join ref_estimates_elec_internal ee
                                        on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and
                                           y.registerreference = ee.register_id
@@ -206,7 +206,7 @@ from (select mp_elec.account_id                                                 
              rma_pcl.attributes_attributevalue                                    as profile_class,
              reg_elec.registers_tpr                                               as tpr,
              (select sum(ppc_sum)
-              from ref_d18_igloo_ppc
+              from ref_d18_igloo_ppc_bak_26042019
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -215,7 +215,7 @@ from (select mp_elec.account_id                                                 
                 and st_date < trunc(max(read_valid.meterreadingdatetime))
               group by gsp_group_id, ss_conf_id)                                  as ppc,
               (select count(*)
-              from ref_d18_igloo_ppc
+              from ref_d18_igloo_ppc_bak_26042019
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -341,6 +341,7 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
                             'Previous_EAC is not available for calculation' else
                             case when ((ppc is null or ppc = 0) and (bpp =0 or bpp is null)) then
                                 'No PPC or BPP is available from d18 for calculation' end end end end else
+
             case when (igloo_eac_v1 - latest_ind_eac_estimates != 0 and igloo_eac_v1 - latest_ind_eac_estimates is not null) and (igloo_eac_v1 != 0 or igloo_eac_v1 is not null) then
                 case when (latest_ind_eac_estimates = 0 or latest_ind_eac_estimates is null) then
                     'Latest EAC from Industry not available yet' else
@@ -358,7 +359,6 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
           1 else 0
           end as bpp_used
 
-
 from ref_calculated_eac_v1 t) t1
 group by t1.category, t1.reason
 order by category
@@ -368,7 +368,7 @@ order by category
 -- where upper(trim(ac.status)) = 'LIVE'
 -- and t1.reason = 'Not Enough reads for calculation'
 
-select * from ref_readings_internal_valid where account_id = 1854 ;
+select * from ref_readings_internal_valid_bak_26042019 where account_id = 1854 ;
 select * from ref_readings_internal where account_id = 14859 and register_id = 20903;
 
 select * from ref_estimates_elec_internal where account_id = 1857;
