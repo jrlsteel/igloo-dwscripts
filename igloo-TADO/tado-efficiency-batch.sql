@@ -246,7 +246,7 @@ from (select x1.*,
                                           where survey_id = 1
                                           group by user_id, survey_id) sr on sr.user_id = up.user_id
                   where
-                      su.external_id = 1832 and
+--                       su.external_id = 1832 and
                      (att.attribute_name in ('resident_ages',
                                                 'heating_control_type',
                                                 'temperature_preference',
@@ -263,7 +263,7 @@ from (select x1.*,
 -- )
 ;
 
-drop table ref_calculated_tado_efficiency_batch;
+-- drop table ref_calculated_tado_efficiency_batch;
 
 create table ref_calculated_tado_efficiency_batch
 (
