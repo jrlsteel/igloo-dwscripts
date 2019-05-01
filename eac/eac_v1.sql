@@ -1,9 +1,9 @@
 -- drop table temp_ref_calculated_eac_v1;
-delete from temp_ref_calculated_eac_v1;
--- create table temp_ref_calculated_eac_v1
+-- delete from temp_ref_calculated_eac_v1;
 --   DISTKEY(account_id) SORTKEY(account_id) as (
 -- insert into temp_ref_calculated_eac_v1
 -- select count(*) from (
+create table ref_calculated_eac_v1 as (
 select st.account_id,
        st.elec_GSP,
        st.elec_ssc,
@@ -35,8 +35,7 @@ select st.account_id,
                                coalesce(st.previous_eac, 0)), 1)
        else
             round(calculate_eac_v1(coalesce(st.smooth_param, 0), coalesce(st.ppc, 0), coalesce(st.read_consumption_elec, 0),
-                               coalesce(st.previous_eac, 0)), 1) end
-        as igloo_eac_v1,
+                               coalesce(st.previous_eac, 0)), 1) end  as igloo_eac_v1,
 --        (case when ppc is null or no_of_ppc_rows < datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec) then
 --             round(calculate_eac_v1(coalesce(st.smooth_param, 0), coalesce(st.bpp, 0), coalesce(st.read_consumption_elec, 0),
 --                                coalesce(st.previous_eac, 0)), 1)
@@ -62,7 +61,7 @@ from (select mp_elec.account_id                                                 
              rma_pcl.attributes_attributevalue                                    as profile_class,
              reg_elec.registers_tpr                                               as tpr,
              (select sum(ppc_sum)
-              from ref_d18_igloo_ppc_bak_26042019
+              from ref_d18_igloo_ppc
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -71,7 +70,7 @@ from (select mp_elec.account_id                                                 
                 and st_date < trunc(max(read_valid.meterreadingdatetime))
               group by gsp_group_id, ss_conf_id)                                  as ppc,
               (select count(*)
-              from ref_d18_igloo_ppc_bak_26042019
+              from ref_d18_igloo_ppc
               where gsp_group_id = rma_gsp.attributes_attributevalue
                 and ss_conf_id = rma_ssc.attributes_attributevalue
                 and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
@@ -123,7 +122,7 @@ from (select mp_elec.account_id                                                 
                               from (select r.*,
                                            dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
                                            count(*) over (partition by account_id, register_id)                                        total_reads
-                                    from ref_readings_internal_valid_bak_26042019 r) y
+                                    from ref_readings_internal_valid r) y
                                      left outer join ref_estimates_elec_internal ee
                                        on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and
                                           y.registerreference = ee.register_id
@@ -135,9 +134,9 @@ from (select mp_elec.account_id                                                 
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
-        and ac.account_id = 1831
+--         and ac.account_id = 1831
         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
-        and upper(ac.status) = 'LIVE'
+--         and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
                mp_elec.meter_point_id,
                reg_elec.register_id,
@@ -151,9 +150,9 @@ from (select mp_elec.account_id                                                 
                read_valid.previous_eac,
                read_valid.latest_eac,
                read_valid.register_id) st
---               )
---     st1
--- where st1.igloo_eac_v1_minus_industry_eac != 0 and st1.latest_ind_eac_estimates != 0 and st1.previous_ind_eac_estimates != 0;
+               );
+
+select * from ref_estimates_elec_internal where account_id = 1831;
 
 /******* EAC_V1 on demand *********/
 select st.account_id,
@@ -359,7 +358,11 @@ select t.*, case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
           1 else 0
           end as bpp_used
 
-from ref_calculated_eac_v1 t) t1
+from ref_calculated_eac_v1 t
+left outer join ref_account_status ac on ac.account_id = t.account_id
+where status = 'Live'
+) t1
+
 group by t1.category, t1.reason
 order by category
 -- inner join ref_account_status ac on ac.account_id = t1.account_id
@@ -368,10 +371,20 @@ order by category
 -- where upper(trim(ac.status)) = 'LIVE'
 -- and t1.reason = 'Not Enough reads for calculation'
 
-select * from ref_readings_internal_valid_bak_26042019 where account_id = 1854 ;
+select * from ref_readings_internal_valid where account_id = 1854 ;
 select * from ref_readings_internal where account_id = 14859 and register_id = 20903;
 
 select * from ref_estimates_elec_internal where account_id = 1857;
 
 select * from ref_meterpoints;
 
+select account_id, count(*) from ref_calculated_eac_v1
+group by account_id
+having count(*) > 1;
+
+select count(*) from ref_cdb_supply_contracts sc
+inner join ref_account_status ac on ac.account_id = sc.external_id
+where ac.status = 'Live';
+
+select etlchange, etlchangetype, count(*) from ref_account_status_audit
+group by etlchange, etlchangetype;

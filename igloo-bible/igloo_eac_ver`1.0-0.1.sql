@@ -220,7 +220,7 @@ and st_date='20190219'
 
 
 select sum(ppc_sum)
-              from ref_d18_igloo_ppc
+              from ref_d18_igloo_ppc_bak_26042019
              where ss_conf_id ='0393'
     and pcl_id = 1
     and gsp_group_id ='_H'
@@ -424,5 +424,5 @@ where account_id = 4601
 
 
 
-select * from ref_readings_internal_valid
+select * from ref_readings_internal_valid_bak_26042019
 where account_id =4601

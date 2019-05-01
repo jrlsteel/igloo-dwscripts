@@ -104,7 +104,7 @@ from (select mp_elec.account_id                                                 
                               from (select r.*,
                                            dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
                                            count(*) over (partition by account_id, register_id)                                        total_reads
-                                    from ref_readings_internal_valid r) y
+                                    from ref_readings_internal_valid_bak_26042019 r) y
                                      left outer join ref_estimates_elec_internal ee
                                        on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and
                                           y.registerreference = ee.register_id
@@ -137,13 +137,13 @@ and mp_elec.account_id = 15187
 select r.*,
        dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
        count(*) over (partition by account_id, register_id)                                        total_reads
-from ref_readings_internal_valid r
+from ref_readings_internal_valid_bak_26042019 r
 where account_id = 15187
 
 select * from (select r.*,
        dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
        count(*) over (partition by account_id, register_id)                                        total_reads
-from ref_readings_internal_valid r) y left outer join ref_estimates_elec_internal ee
+from ref_readings_internal_valid_bak_26042019 r) y left outer join ref_estimates_elec_internal ee
     on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and y.registerreference = ee.register_id
     and y.meterserialnumber = ee.serial_number and
     ee.effective_from = y.meterreadingdatetime
@@ -256,7 +256,7 @@ from (select mp_elec.account_id                                                 
                               from (select r.*,
                                            dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
                                            count(*) over (partition by account_id, register_id)                                        total_reads
-                                    from ref_readings_internal_valid r) y
+                                    from ref_readings_internal_valid_bak_26042019 r) y
                                      left outer join ref_estimates_elec_internal ee
                                        on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and
                                           y.registerreference = ee.register_id
