@@ -1,6 +1,6 @@
 
 /******** ref_d18_igloo_ppc ************/
-
+drop table ref_d18_igloo_ppc;
 -- create table for ppc
 create table ref_d18_igloo_ppc
 (
@@ -26,7 +26,7 @@ create table ref_d18_igloo_ppc
 	time_pattern_regime varchar(255),
 	ppc varchar(10),
 	ppc_sum double precision,
-	row_number bigint,
+	row bigint,
 	etlchange timestamp
 )
 diststyle key
@@ -180,7 +180,7 @@ pfl_id,
 time_pattern_regime,
 run_no,
 count(*)
-from ref_d18_igloo_ppc
+from ref_d18_igloo_ppc_bak_26042019
 group by st_date,
 gsp_group_id,
 ss_conf_id,
@@ -213,6 +213,6 @@ group by st_date
 
 
 /** To validate a single date **/
-select * from ref_d18_igloo_ppc where gsp_group_id = '_D' and ss_conf_id = '0393' and time_pattern_regime = '00001'
+select * from ref_d18_igloo_ppc_bak_26042019 where gsp_group_id = '_D' and ss_conf_id = '0393' and time_pattern_regime = '00001'
 and st_date >= '2017-09-20' and st_date < '2019-03-15' and pcl_id in (1);
 

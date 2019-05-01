@@ -38,7 +38,7 @@ create table ref_readings_internal_valid
 alter table ref_readings_internal_valid
   owner to igloo;
 
-delete from ref_readings_internal_valid;
+-- delete from ref_readings_internal_valid;
 
 -- insert into ref_readings_internal_valid (
 SELECT s.account_id,
@@ -124,7 +124,7 @@ FROM (SELECT ri.account_id,
 ;
 
 /***** view for readings_internal_valid_pa for PA_EAC or EAV_v1 on demand ****/
---drop view vw_corrected_round_clock_reading_pa;
+-- drop view vw_corrected_round_clock_reading_pa;
 create or replace view vw_corrected_round_clock_reading_pa as
 SELECT s.account_id,
        s.meter_point_id,
@@ -235,11 +235,21 @@ $$;
 
 /*** validate sql for meter roll over. Should always give 0 ****/
 select *
-from temp_ref_readings_internal_valid
+from ref_readings_internal_valid_bak_26042019
 where meter_rolled_over = 'Y'
-  and no_of_digits != 0
-  and max_previous_reading < max_reading - 10000
+  and no_of_digits in(5)
+  and max_previous_reading < 99999 - 10000
     -- 			register_id = 2069 and
-    -- 		account_id = 14805 and
-    -- 			meterpointtype = 'E'
+--     		and account_id = 14805 and
+    			and meterpointtype = 'E'
 order by register_id, meterreadingdatetime;
+
+select * from ref_readings_internal_valid where account_id = 14805 and meterpointtype = 'E';
+select * from ref_readings_internal_valid_bak_26042019 where account_id = 14805 and meterpointtype = 'E';
+
+14805,
+13964,
+3413,
+24441
+
+
