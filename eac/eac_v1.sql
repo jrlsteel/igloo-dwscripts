@@ -3,7 +3,7 @@
 --   DISTKEY(account_id) SORTKEY(account_id) as (
 -- insert into temp_ref_calculated_eac_v1
 -- select count(*) from (
-create table ref_calculated_eac_v1 as (
+-- create table ref_calculated_eac_v1 as (
 select st.account_id,
        st.elec_GSP,
        st.elec_ssc,
@@ -134,7 +134,7 @@ from (select mp_elec.account_id                                                 
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
---         and ac.account_id = 1831
+        and ac.account_id = 38259
         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
 --         and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
@@ -150,7 +150,8 @@ from (select mp_elec.account_id                                                 
                read_valid.previous_eac,
                read_valid.latest_eac,
                read_valid.register_id) st
-               );
+--                )
+               ;
 
 select * from ref_estimates_elec_internal where account_id = 1831;
 
