@@ -53,12 +53,8 @@ select  t.*,
           end as bpp_used
 
 from ref_calculated_eac_v1_audit t
--- left outer join ref_account_status ac on ac.account_id = t.account_id
--- where
--- status = 'Live'
 ) t1
 left outer join (
-select * from (
 select
        t.*,
 
@@ -99,16 +95,14 @@ select
 
        case when ppc is null or no_of_ppc_rows < datediff(days, read_min_datetime_elec, read_max_datetime_elec) then
           1 else 0
-          end as bpp_used,
-       dense_rank() over (partition by t.account_id, t.register_id) row_num
+          end as bpp_used
 
-from ref_calculated_eac_v1_audit t where trunc(etlchange) = '2019-05-02') x
-where x.row_num = 1
+from ref_calculated_eac_v1_audit t where trunc(etlchange) = ${etlchange2}
 ) t2
 on t1.account_id = t2.account_id and t1.meterpoint_id = t2.meterpoint_id
-            and t1.register_id = t2.register_id and trunc(t2.etlchange) = '2019-05-02'
+            and t1.register_id = t2.register_id and trunc(t2.etlchange) = ${etlchange2}
 where
-trunc(t1.etlchange) = '2019-05-01'
+trunc(t1.etlchange) = ${etlchange1}
 -- and t1.category = 'Exact match' and t2.category in('Igloo EAC Not calculated')
 group by
 -- t1.account_id,
@@ -118,18 +112,3 @@ t1.reason,
 t2.category,
 t2.reason
 order by t1.category;
-
-select * from ref_calculated_eac_v1_audit where account_id = 7094 and register_id = 11986;
-
-select * from ref_registers where register_id = 60638;
-
--- select * from ref_account_status where account_id = 38259;
-
-select * from ref_readings_internal_valid where meter_point_id = 12091;
-select * from ref_readings_internal_audit where account_id = 7094;
-
-select * from ref_d18_igloo_ppc_audit;
-select count(*) from (
-select distinct account_id, register_id from ref_calculated_eac_v1_audit t where trunc(etlchange) = '2019-05-02')
-;
-or trunc(etlchange) = '2019-05-02';

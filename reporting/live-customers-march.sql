@@ -38,6 +38,7 @@ group by
 mp.account_id
 ) x;
 
+-- Get balances as of dd-mm-yyyy
 select x.account_id, x.balance, x.* from (
 select at.account_id,
        at.currentbalance as balance, at.creationdetail_createddate,
@@ -47,14 +48,4 @@ row_number() over (partition by account_id order by creationdetail_createddate d
   ) x
  where x.row_number = 1
  and balance != 0
-
 ;
-
-select account_id, count(*)
-from aws_s3_stage2_extracts.stage2_livebalances
-group by account_id
-having count(*)>1
-order by account_id;
-
-select * from aws_s3_stage2_extracts.stage2_livebalances
-where account_id is null
