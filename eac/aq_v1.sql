@@ -1,5 +1,5 @@
-delete
-from ref_calculated_aq_v1;
+-- delete
+-- from ref_calculated_aq_v1;
 -- drop table temp_ref_calculated_aq;
 -- create table ref_calculated_aq_v1 as
 -- insert into ref_calculated_aq_v1
@@ -89,9 +89,10 @@ from (select mp_gas.account_id                                                  
                                      y.corrected_reading,
                                      datediff(days, meterreadingdatetime, max(
                                                                             y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) as days_diff,
+                                     y.ind_aq,
                                      case when datediff(days, meterreadingdatetime,
                                                         max(y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) = 0 then
-                                                        y.latest_ind_aq else 0 end as latest_ind_aq,
+                                                        y.ind_aq else 0 end as latest_ind_aq,
                                      min(meterreadingdatetime) over (partition by account_id, register_id) min_readings_datetime,
                                      y.row_num
                               from (select r.*,
@@ -104,16 +105,16 @@ from (select mp_gas.account_id                                                  
                                                        and r.registerreference = eg.register_id
                                                        and r.meterserialnumber = eg.serial_number
                                                        and DATEDIFF(days, r.meterreadingdatetime, eg.effective_from) between 0 and 40
-                                                     order by eg.effective_from desc), 0)                as latest_ind_aq
-                                    from temp_ref_readings_internal_valid r
+                                                     order by eg.effective_from desc), 0)                as ind_aq
+                                    from ref_readings_internal_valid r
                                     where r.meterreadingdatetime > '2017-10-01'
                                    ) y
                               where y.total_reads >= 2
-                                and y.latest_ind_aq != 0
+--                                 and y.ind_aq != 0
                                     ) read_valid
                on mp_gas.account_id = read_valid.account_id and reg_gas.register_id = read_valid.register_id and
-                                            ((read_valid.days_diff > 270 and read_valid.days_diff <= 3 * 365)
-                                                or read_valid.row_num = 2
+                                            ((read_valid.days_diff = 0 or read_valid.days_diff between 273 and 365)
+--                                                 or read_valid.row_num = 2
                                              )
 
 --                                             (read_valid.days_diff = 184  or read_valid.days_diff = 0)
@@ -137,6 +138,58 @@ where
     st1.ind_minus_igloo_aq between -1 and 1 and
       st1.industry_aq_on_register!=0 and st1.udf_igloo_aq_v1!=0
 ;
+
+effective_from,effective_to,estimation_value
+2019-03-25 15:13:00.773000,9999-12-31 23:59:59.000000,24639
+2019-02-21 19:12:43.443000,9999-12-31 23:59:59.000000,24824
+2019-01-28 08:54:57.207000,9999-12-31 23:59:59.000000,24591
+2018-12-20 17:13:44.753000,9999-12-31 23:59:59.000000,24461
+2018-11-24 18:11:59.617000,9999-12-31 23:59:59.000000,24239
+2018-10-26 11:12:17.977000,9999-12-31 23:59:59.000000,24019
+2018-09-24 20:11:43.600000,9999-12-31 23:59:59.000000,24517
+2018-08-26 12:11:42.883000,9999-12-31 23:59:59.000000,24744
+2018-08-13 16:49:51.430000,9999-12-31 23:59:59.000000,24848
+2018-06-22 17:12:17.863000,9999-12-31 23:59:59.000000,24395
+2018-05-29 16:11:11.803000,9999-12-31 23:59:59.000000,24934
+2018-02-01 00:00:00.000000,9999-12-31 23:59:59.000000,26109
+
+
+select y.account_id,
+                                     y.meterpointnumber,
+                                     y.meterpointtype,
+                                     y.registerreference,
+                                     y.register_id,
+                                     y.no_of_digits,
+                                     y.meterreadingdatetime,
+                                     y.meterreadingcreateddate,
+                                     y.corrected_reading,
+                                     datediff(days, meterreadingdatetime, max(
+                                                                            y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) as days_diff,
+                                     y.ind_aq,
+                                     case when datediff(days, meterreadingdatetime,
+                                                        max(y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) = 0 then
+                                                        y.ind_aq else 0 end as latest_ind_aq,
+                                     min(meterreadingdatetime) over (partition by account_id, register_id) min_readings_datetime,
+                                     y.row_num
+                              from (select r.*,
+                                           count(*) over (partition by r.account_id, r.register_id) as total_reads,
+                                           dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) row_num,
+                                           coalesce((select top 1 estimation_value
+                                                     from ref_estimates_gas_internal eg
+                                                     where eg.account_id = r.account_id
+                                                       and r.meterpointnumber = eg.mprn
+                                                       and r.registerreference = eg.register_id
+                                                       and r.meterserialnumber = eg.serial_number
+                                                       and DATEDIFF(days, r.meterreadingdatetime, eg.effective_from) between 0 and 40
+                                                     order by eg.effective_from desc), 0)                as ind_aq
+                                    from ref_readings_internal_valid r
+                                    where r.meterreadingdatetime > '2017-10-01'
+                                   ) y
+                              where y.total_reads >= 2
+                              and y.meterpointtype = 'G'
+                                and y.ind_aq != 0
+                                    and y.account_id = 6942
+
 
 
 select distinct attributes_attributevalue
@@ -177,7 +230,7 @@ from svl_udf_log;
 
 select *
 from ref_estimates_gas_internal
-where account_id = 5773;
+where account_id = 5759;
 
 -- between -1 and 1 = 1
 -- between -1 and 1 = 1
@@ -194,7 +247,7 @@ select y.account_id,
        y.corrected_reading,
        datediff(days, meterreadingdatetime,
                 max(y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) as days_diff,
-       y.latest_ind_aq,
+       y.ind_aq,
        case when datediff(days, meterreadingdatetime,
                 max(y.meterreadingdatetime) OVER (PARTITION BY y.account_id, y.register_id)) = 0 then
                 y.latest_ind_aq else 0 end as latest_ind_aq,
@@ -210,9 +263,9 @@ from (select r.*,
                          and r.registerreference = eg.register_id
                          and r.meterserialnumber = eg.serial_number
                          and DATEDIFF(days, r.meterreadingdatetime, eg.effective_from) between 0 and 40
-                       order by eg.effective_from desc), 0)                as latest_ind_aq
+                       order by eg.effective_from desc), 0)                as ind_aq
       from temp_ref_readings_internal_valid r
---       where r.meterreadingdatetime > '2017-10-01'
+      where r.meterreadingdatetime > '2017-10-01'
      ) y
 where y.account_id = 5773
   and y.total_reads >= 2
@@ -223,7 +276,7 @@ where y.account_id = 5773
 order by y.account_id, y.register_id, meterreadingdatetime desc;
 
 select * from (
-select r.*, min(meterreadingdatetime) over (partition by account_id, register_id) min_readings_datetime  from temp_ref_readings_internal_valid r
+select r.*, min(meterreadingdatetime) over (partition by account_id, register_id) min_readings_datetime  from ref_readings_internal_valid r
 ) y
 where y.min_readings_datetime > '2017-10-01' and y.meterpointtype = 'G' and account_id = 1870;
 
@@ -234,7 +287,7 @@ select eg.*,
        dense_rank() over (partition by account_id, mprn, register_id, serial_number order by effective_from desc)
 from ref_estimates_gas_internal eg;
 
-select add_months(last_day(getdate()), -2) + 10;
+select add_months(last_day(getdate()), -2) + 10 ;
 
 select * from ref_meterpoints where meter_point_id = 2101;
 select * from ref_meterpoints where meterpointnumber = 2000007809594;

@@ -1,8 +1,8 @@
 /*** EAC_v1 analysis ***/
 
 select
-t1.account_id,
-t1.register_id,
+-- t1.account_id,
+-- t1.register_id,
 t1.category as category_01052019,
 t1.reason as reason_01052019,
 t2.category as category_02052019,
@@ -11,7 +11,7 @@ case when (t1.category != t2.category or t1.reason != t2.reason) then
     'Y' else 'N' end as status_changed,
 count(*)
  from (
-select t.*,
+select  t.*,
 
             case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
                       and (igloo_eac_v1 != 0 and igloo_eac_v1 is not null) then
@@ -53,13 +53,14 @@ select t.*,
           end as bpp_used
 
 from ref_calculated_eac_v1_audit t
-
-left outer join ref_account_status ac on ac.account_id = t.account_id
-where
-status = 'Live'
+-- left outer join ref_account_status ac on ac.account_id = t.account_id
+-- where
+-- status = 'Live'
 ) t1
 left outer join (
-select t.*,
+select * from (
+select
+       t.*,
 
             case when (igloo_eac_v1 - latest_ind_eac_estimates = 0)
                       and (igloo_eac_v1 != 0 and igloo_eac_v1 is not null) then
@@ -98,29 +99,37 @@ select t.*,
 
        case when ppc is null or no_of_ppc_rows < datediff(days, read_min_datetime_elec, read_max_datetime_elec) then
           1 else 0
-          end as bpp_used
+          end as bpp_used,
+       dense_rank() over (partition by t.account_id, t.register_id) row_num
 
-from ref_calculated_eac_v1_audit t
+from ref_calculated_eac_v1_audit t where trunc(etlchange) = '2019-05-02') x
+where x.row_num = 1
 ) t2
 on t1.account_id = t2.account_id and t1.meterpoint_id = t2.meterpoint_id
             and t1.register_id = t2.register_id and trunc(t2.etlchange) = '2019-05-02'
 where
 trunc(t1.etlchange) = '2019-05-01'
-and t1.category = 'Exact match' and t2.category in('Igloo EAC Not calculated')
+-- and t1.category = 'Exact match' and t2.category in('Igloo EAC Not calculated')
 group by
-t1.account_id,
-t1.register_id,
+-- t1.account_id,
+-- t1.register_id,
 t1.category,
 t1.reason,
 t2.category,
 t2.reason
-order by t1.category
+order by t1.category;
 
 select * from ref_calculated_eac_v1_audit where account_id = 7094 and register_id = 11986;
 
 select * from ref_registers where register_id = 60638;
 
-select * from ref_account_status where account_id = 38259;
+-- select * from ref_account_status where account_id = 38259;
 
 select * from ref_readings_internal_valid where meter_point_id = 12091;
 select * from ref_readings_internal_audit where account_id = 7094;
+
+select * from ref_d18_igloo_ppc_audit;
+select count(*) from (
+select distinct account_id, register_id from ref_calculated_eac_v1_audit t where trunc(etlchange) = '2019-05-02')
+;
+or trunc(etlchange) = '2019-05-02';
