@@ -100,7 +100,7 @@ select
 from ref_calculated_eac_v1_audit t where trunc(etlchange) = ${etlchange2}
 ) t2
 on t1.account_id = t2.account_id and t1.meterpoint_id = t2.meterpoint_id
-            and t1.register_id = t2.register_id and trunc(t2.etlchange) = ${etlchange2}
+            and t1.register_id = t2.register_id
 where
 trunc(t1.etlchange) = ${etlchange1}
 -- and t1.category = 'Exact match' and t2.category in('Igloo EAC Not calculated')
