@@ -31,9 +31,9 @@ select
                           select at.account_id, at.currentbalance,
                           row_number() over (partition by account_id order by creationdetail_createddate desc) as row_number
                            from aws_s3_stage2_extracts.stage2_accounttransactions at
-                           where creationdetail_createddate <= '2019-03-31') x
+                           where creationdetail_createddate <= ${date}) x
                      where x.row_number = 1) s2 on s2.account_id = mp.account_id
-    where supplystartdate <= '2019-03-31'
+    where supplystartdate <= ${date}
 group by
 mp.account_id
 ) x;
