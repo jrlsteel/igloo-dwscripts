@@ -1,20 +1,4 @@
 --DMRE-434 Live customers as of 31st of march
-select
-  sum(case when x.mp in('E', 'EG', 'GE') then 1 else 0 end) as accounts_atleast_1elec_mp,
-  sum(case when x.mp in('G', 'EG', 'GE') then 1 else 0 end) as accounts_atleast_1gas_mp
-  from (
-select
-account_id,
-listagg(distinct meterpointtype) as mp
-from ref_meterpoints
-where supplystartdate <= '2019-03-31' and
-(supplyenddate is null and
-          (associationenddate is null or associationenddate > '2019-03-31') or
-           supplyenddate > '2019-03-31'
-)
-group by
-account_id
-) x;
 
 -- Live+Lost customers as of 31st of march with balances != 0 (debit/credit)
 select
@@ -38,6 +22,7 @@ group by
 mp.account_id
 ) x;
 
+/*
 -- Get balances as of dd-mm-yyyy
 select x.account_id, x.balance, x.* from (
 select at.account_id,
@@ -49,3 +34,4 @@ row_number() over (partition by account_id order by creationdetail_createddate d
  where x.row_number = 1
  and balance != 0
 ;
+*/
