@@ -32,3 +32,5 @@ where supplystartdate <= ${date} and
 group by
 account_id
 ) x;
+
+
