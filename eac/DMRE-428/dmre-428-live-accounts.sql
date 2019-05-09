@@ -2,6 +2,22 @@ select su.external_id               as supply_conatract_external_id,
        ac.status                    as account_status,
        reg_elec_status.status       as mp_elec_reg_status,
        reg_status_gas.status        as mp_gas_reg_status,
+       case
+         when (mp_elec.supplystartdate <= current_date) and
+              (mp_elec.supplyenddate is null or mp_elec.supplyenddate >= current_date) then 'Live'
+         else 'Not Live' end        as meterpoints_status_elec,
+       case
+         when (mp_gas.supplystartdate <= current_date) and
+              (mp_gas.supplyenddate is null or mp_gas.supplyenddate >= current_date) then 'Live'
+         else 'Not Live' end        as meterpoints_status_gas,
+       case
+         when (mp_elec.associationstartdate <= current_date) and
+              (mp_elec.associationenddate is null or mp_elec.associationenddate >= current_date) then 'Live'
+         else 'Not Live' end        as meterpoints_assoc_status_elec,
+       case
+         when (mp_gas.associationstartdate <= current_date) and
+              (mp_gas.associationenddate is null or mp_gas.associationenddate >= current_date) then 'Live'
+         else 'Not Live' end        as meterpoints_assoc_status_gas,
        mp_elec.account_id           as mp_elec_account_id,
        mp_elec.meter_point_id       as mp_elec_meter_point_id,
        mp_elec.supplystartdate      as mp_elec_ssd,
