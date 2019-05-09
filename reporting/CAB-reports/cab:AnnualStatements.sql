@@ -4,8 +4,7 @@ select
        count(*) as T4_statements_due_to_be_sent,
        sum(case
              when x.createddate is not null
-                    and x.createddate >= period_start_date and
-                  x.createddate <= period_end_date then 1
+                    and x.createddate between period_start_date and period_end_date then 1
              else 0 end) as  T5_statemtents_issued_within_relevant_time,
        sum(case
              when x.createddate is not null
@@ -16,7 +15,8 @@ select
                   then 1
              else 0 end) as  T6_statements_not_sent_yet
 from
-     (select su.external_id as account_id,
+     (select
+            su.external_id as account_id,
             mp.meterpointtype,
             mp.supplystartdate,
             mp.supplyenddate,
@@ -30,9 +30,15 @@ from
             from ref_cdb_supply_contracts su
                   left outer join ref_meterpoints mp on su.external_id = mp.account_id
                   left outer join temp_ref_annual_statements ans on ans.account_id = su.external_id and ans.energytype = mp.meterpointtype
-            where mp.supplystartdate is not null and
-                  dateadd(months, 12, mp.supplystartdate) between ${startdate} and ${enddate}
-                  and su.external_id is not null
+            where
+                  su.external_id is not null and
+                  mp.supplystartdate is not null and
+                  dateadd(months, 12, mp.supplystartdate) between ${startdate} and ${enddate} and
+                  (
+                   mp.supplyenddate is null
+                    or
+                  (mp.supplyenddate is not null and dateadd(months, 12, mp.supplystartdate) >= mp.supplyenddate)
+                  )
             ) x
 where x.has_enddate_before_startdate = 0
 group by x.meterpointtype;
