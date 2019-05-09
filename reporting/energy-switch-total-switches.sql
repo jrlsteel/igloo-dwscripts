@@ -17,27 +17,27 @@ select ens.*,
 --        count(*) as total
 from (
 select
-       external_id as ensek_id,
+       external_id as account_id,
        mp.meterpointnumber as mpxn,
        mp.meterpointtype meterpoint_type,
        su.created_at as welcome_letter_date_wl_0,
        date_part(dow, su.created_at) as day_of_week,
-       case when (date_part(dow, su.created_at) = 5 and date_part(hours, su.created_at) >= 17 and date_part(minutes, su.created_at) > 30)
-                  or date_part(dow, su.created_at) in (6,0)
-                then 'non-working-days'
-           else
-                'working-days' end
-        as week_days,
-        case when (date_part(dow, su.created_at) = 5 and date_part(hours, su.created_at) >= 17 and date_part(minutes, su.created_at) > 30)
-                  or date_part(dow, su.created_at) = 6
-                then dateadd(days,(8 - date_part(dow, su.created_at))::int , su.created_at)
-            else case when date_part(dow, su.created_at) = 0 then dateadd(days, 1, su.created_at)
-           else
-                su.created_at end end
-        as wl0_transposed_date,
+--        case when (date_part(dow, su.created_at) = 5 and date_part(hours, su.created_at) >= 17 and date_part(minutes, su.created_at) > 30)
+--                   or date_part(dow, su.created_at) in (6,0)
+--                 then 'non-working-days'
+--            else
+--                 'working-days' end
+--         as week_days,
+--         case when (date_part(dow, su.created_at) = 5 and date_part(hours, su.created_at) >= 17 and date_part(minutes, su.created_at) > 30)
+--                   or date_part(dow, su.created_at) = 6
+--                 then dateadd(days,(8 - date_part(dow, su.created_at))::int , su.created_at)
+--             else case when date_part(dow, su.created_at) = 0 then dateadd(days, 1, su.created_at)
+--            else
+--                 su.created_at end end
+--         as wl0_transposed_date,
        mp.associationstartdate association_start_wl_1,
        mp.supplystartdate as supply_start_date,
-       mp.supplyenddate as supply_end_date,
+--        mp.supplyenddate as supply_end_date,
        datediff(days,su.created_at, mp.supplystartdate) as switch_days_wl_0,
        datediff(days,mp.associationstartdate, mp.supplystartdate) as switch_days_wl_1,
        case when rsg.account_id is not null then 'Y' else 'N' end as gas_had_negative_status,
