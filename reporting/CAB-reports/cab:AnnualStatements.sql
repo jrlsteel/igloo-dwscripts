@@ -37,7 +37,7 @@ from
                   (
                    mp.supplyenddate is null
                     or
-                  (mp.supplyenddate is not null and dateadd(months, 12, mp.supplystartdate) >= mp.supplyenddate)
+                  (mp.supplyenddate is not null and mp.supplyenddate >= dateadd(months, 12, mp.supplystartdate))
                   )
             ) x
 where x.has_enddate_before_startdate = 0
