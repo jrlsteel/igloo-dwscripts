@@ -117,7 +117,6 @@ from (select mp_gas.account_id                                                  
                                             (read_valid.days_diff = 0 or read_valid.days_diff between 273 and 365)
 --                                                 or read_valid.row_num = 2
                                              )
-
 --                                             (read_valid.days_diff = 184  or read_valid.days_diff = 0)
                                      and read_valid.min_readings_datetime >'2017-10-01'
       where

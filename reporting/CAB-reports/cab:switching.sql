@@ -1,12 +1,12 @@
 -- 18-04-2019
-select
-       sum(case when switch_days_wl_0 > 21 then 1 else 0 end) as greater_than_21,
-       sum(case when switch_days_wl_0 < 21 then 1 else 0 end) as less_than_21,
-       sum(case when switch_days_wl_0 = 21 then 1 else 0 end) as equal_to_21,
-       sum(case when switch_days_wl_1 > 21 then 1 else 0 end) as greater_than_21_asso,
-       sum(case when switch_days_wl_1 < 21 then 1 else 0 end) as less_than_21_asso,
-       sum(case when switch_days_wl_1 = 21 then 1 else 0 end) as equal_to_21_asso,
-       count(*) as total from (
+-- select
+--        sum(case when switch_days_wl_0 > 21 then 1 else 0 end) as greater_than_21,
+--        sum(case when switch_days_wl_0 < 21 then 1 else 0 end) as less_than_21,
+--        sum(case when switch_days_wl_0 = 21 then 1 else 0 end) as equal_to_21,
+--        sum(case when switch_days_wl_1 > 21 then 1 else 0 end) as greater_than_21_asso,
+--        sum(case when switch_days_wl_1 < 21 then 1 else 0 end) as less_than_21_asso,
+--        sum(case when switch_days_wl_1 = 21 then 1 else 0 end) as equal_to_21_asso,
+--        count(*) as total from (
 select
        external_id as ensek_id,
        mp.meterpointnumber as mpxn,
