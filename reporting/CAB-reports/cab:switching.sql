@@ -47,3 +47,4 @@ order by ensek_id, meterpoint_type
 -- ) ens
 -- where switch_days_createdat < 21
 ;
+
