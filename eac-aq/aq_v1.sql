@@ -287,7 +287,7 @@ select eg.*,
        dense_rank() over (partition by account_id, mprn, register_id, serial_number order by effective_from desc)
 from ref_estimates_gas_internal eg;
 
-select add_months(last_day(getdate()), -2) + 10 ;
+select last_day(add_months('2019-09-05', -2));
 
 select * from ref_meterpoints where meter_point_id = 2101;
 select * from ref_meterpoints where meterpointnumber = 2000007809594;
