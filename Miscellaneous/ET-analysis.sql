@@ -1,3 +1,5 @@
+/*Erroneous Transfer*/
+
 select * from ref_meterpoints mp
 left outer join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id and mp.meter_point_id = mpa.meter_point_id
 where mp.account_id = 29287;
@@ -9,7 +11,8 @@ left outer join (select mpa.account_id, mpa.meter_point_id, mpa.attributes_attri
                   where mpa.attributes_attributename = 'ET'
                   group by mpa.account_id, mpa.meter_point_id, mpa.attributes_attributename) mpa1 on mpa1.account_id = mp.account_id and mpa1.meter_point_id = mp.meter_point_id
   ) x
-where account_id in (
+where account_id in
+(
 3289,
 5560,
 5874,
@@ -43,7 +46,8 @@ where account_id in (
 31110,
 34246,
 36447,
-41612)
+41612
+)
 group by x.account_id, x.meter_point_id, x.meterpointnumber
 -- having count(*) > 1
 

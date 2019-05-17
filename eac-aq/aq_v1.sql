@@ -58,7 +58,7 @@ from (select mp_gas.account_id                                                  
              min(read_valid.corrected_reading)                                                                                             as read_min_readings_gas,
              max(read_valid.corrected_reading)                                                                                             as read_max_readings_gas,
              max(read_valid.corrected_reading) - min(read_valid.corrected_reading)                                                         as read_consumption_gas,
-             (select sum((1 + (waalp.value * waalp.variance)) * waalp.forecastdocumentation)
+             (select sum((1 + ((waalp.value/2) * (waalp.variance))) * (waalp.forecastdocumentation/2))
               from ref_alp_igloo_daf_wcf waalp
               where waalp.ldz = trim(rma_ldz.attributes_attributevalue)
                 and waalp.date >= min(trunc(read_valid.meterreadingdatetime)) and waalp.date < max(trunc(read_valid.meterreadingdatetime)))        as waalp,
