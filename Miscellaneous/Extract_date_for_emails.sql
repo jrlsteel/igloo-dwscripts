@@ -1,24 +1,4 @@
-select
-       t.id,
-       su.external_id as account_id,
-       reg.marketing,
--- --        rcu as fullname,
---        rcu.first_name,
---        rcu.last_name,
-       t.email as temail,
-       rcu.email,
-       ac.status,
-       min(mp.supplystartdate) as supplystartdate
-from ref_cdb_supply_contracts su
-       inner  join ref_meterpoints mp on mp.account_id = su.external_id and mp.meterpointtype = 'E'
-       inner  join ref_account_status ac on mp.account_id = ac.account_id
-       inner join ref_cdb_user_permissions rcup on su.id = rcup.permissionable_id and permission_level = 0 and
-                                                   permissionable_type = 'App\\SupplyContract'
-       inner join ref_cdb_users rcu on rcup.user_id = rcu.id
-       inner join ref_cdb_registrations reg on su.registration_id = reg.id
-       inner join temp_email1 t on t.email = rcu.email
-group by t.id, t.email, su.external_id, rcu.email, ac.status, reg.marketing
-order by su.external_id;
+
 
 select te.id, te.email, x.email, x.*,
        case when x.email is null then 'Y' else 'N' end email_not_found

@@ -4,6 +4,7 @@
 -- create table ref_calculated_aq_v1 as
 -- insert into ref_calculated_aq_v1
 -- AQ V1 batch--
+
 select * from (
 select st.account_id,
        st.gas_LDZ,
@@ -28,11 +29,11 @@ select st.account_id,
        st.register_eac_gas                                             as industry_aq_on_register,
        st.latest_ind_aq_estimates                                      as industry_aq_on_estimates,
        st.U,
-      case
-         when st.waalp != 0 and st.cv != 0 and st.read_consumption_gas != 0 then
-           (((st.read_consumption_gas * 1.02264 * st.cv * st.U) / 3.6) * 365) /
-           st.waalp
-         else 0 end                                                    as igloo_aq_v1,
+--       case
+--          when st.waalp != 0 and st.cv != 0 and st.read_consumption_gas != 0 then
+--            (((st.read_consumption_gas * 1.02264 * st.cv * st.U) / 3.6) * 365) /
+--            st.waalp
+--          else 0 end                                                    as igloo_aq_v1,
        round(calculate_aq_v1(coalesce(st.read_consumption_gas, 0), coalesce(st.cv, 0), coalesce(st.waalp, 0),
                        coalesce(st.gas_Imperial_Meter_Indicator, 'U'))::numeric, 2) as udf_igloo_aq_v1,
 
@@ -120,7 +121,7 @@ from (select mp_gas.account_id                                                  
 --                                             (read_valid.days_diff = 184  or read_valid.days_diff = 0)
                                      and read_valid.min_readings_datetime >'2017-10-01'
       where
---             mp_gas.account_id in (5773) and
+            mp_gas.account_id in (5773) and
              mp_gas.meterpointtype = 'G'
         and (mp_gas.supplyenddate is null or mp_gas.supplyenddate > getdate())
       group by mp_gas.account_id,
@@ -133,10 +134,13 @@ from (select mp_gas.account_id                                                  
                mtrs_gas.removeddate,
                rma_ldz.attributes_attributevalue,
                rma_imp.attributes_attributevalue) st
-    ) st1
-where
-    st1.ind_minus_igloo_aq between -1 and 1 and
-      st1.industry_aq_on_register!=0 and st1.udf_igloo_aq_v1!=0
+    ) st1 ) t
+    left outer join ref_cacluated_aq_v1 r on t.account_id = r.account_id and t.register_id = r.register_id
+                               where t.read_max_datetime_gas != r.read_max_datetime_gas
+                                  or r.account_id is null
+-- where
+--     st1.ind_minus_igloo_aq between -1 and 1 and
+--       st1.industry_aq_on_register!=0 and st1.udf_igloo_aq_v1!=0
 ;
 
 effective_from,effective_to,estimation_value
