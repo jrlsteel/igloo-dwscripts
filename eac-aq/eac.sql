@@ -100,7 +100,7 @@ select st.account_id,
                                rma_pcl.attributes_attributevalue)
               st) st1
 
-
+select * from (
 select st.account_id,
              st.elec_GSP,
              st.elec_ssc,
@@ -154,19 +154,19 @@ select st.account_id,
                                                               rma_pcl.attributes_attributename = 'Profile Class'
                    inner join ref_meters mtrs_elec on mtrs_elec.meter_point_id = mp_elec.meter_point_id and mtrs_elec.removeddate is NULL
                    inner join ref_registers reg_elec on mtrs_elec.meter_id = reg_elec.meter_id
-                   left outer join ref_readings_internal_valid_bak_26042019 read_valid
+                   left outer join ref_readings_internal_valid read_valid
                      on read_valid.register_id = reg_elec.register_id
             where
-                  mp_elec.account_id in
-                  (
-                    1856,
-                    1858,
-                    1904,
-                    1933,
-                    1977
-) and
+--                   mp_elec.account_id in
+--                   (
+--                     1856,
+--                     1858,
+--                     1904,
+--                     1933,
+--                     1977
+-- ) and
                   mp_elec.meterpointtype = 'E'
---                   (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
+--         (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
       group by mp_elec.account_id,
                mp_elec.meter_point_id,
                reg_elec.register_id,
@@ -177,6 +177,10 @@ select st.account_id,
                rma_ssc.attributes_attributevalue,
                rma_pcl.attributes_attributevalue
                ) st
+               ) st1
+               where st1.igloo_eac = 0
+
+select * from ref_readings_internal_valid where account_id = 2464
 
 select * from ref_meterpoints_attributes where
 
