@@ -110,7 +110,7 @@ from (select mp_gas.account_id                                                  
                                     where r.meterreadingdatetime > '2017-10-01'
                                    ) y
                               where y.total_reads >= 2
---                                 and y.ind_aq != 0
+                                and y.ind_aq != 0
                                     ) read_valid
                on mp_gas.account_id = read_valid.account_id and reg_gas.register_id = read_valid.register_id and
                                             ((read_valid.days_diff = 0 or read_valid.days_diff between 273 and 365)
