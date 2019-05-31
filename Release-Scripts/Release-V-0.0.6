@@ -1,0 +1,233 @@
+create table ref_calculated_aq_audit
+(
+	account_id bigint encode delta distkey,
+	gas_ldz varchar(255),
+	gas_imperial_meter_indicator varchar(255),
+	meterpoint_id bigint encode delta,
+	supplyend_date timestamp,
+	meter_removed_date timestamp,
+	register_id bigint encode delta32k,
+	no_of_digits integer,
+	read_min_created_date_gas date encode delta,
+	read_max_created_date_gas date encode bytedict,
+	read_min_readings_gas double precision,
+	read_max_readings_gas double precision,
+	read_months_diff_gas bigint encode delta,
+	read_days_diff_gas bigint,
+	read_consumption_gas double precision encode bytedict,
+	cv double precision,
+	waalp double precision,
+	rmq double precision,
+	industry_aq double precision,
+	igloo_aq double precision,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+diststyle key
+sortkey(etlchange, account_id)
+;
+
+alter table ref_calculated_aq_audit owner to igloo_dw_uat_user
+;
+
+
+create table ref_calculated_eac_v1_audit
+(
+	account_id bigint encode delta32k,
+	elec_gsp varchar(255),
+	elec_ssc varchar(255),
+	meterpoint_id bigint encode delta32k,
+	supplyend_date timestamp,
+	meter_removed_date timestamp,
+	register_id bigint encode delta32k,
+	no_of_digits integer,
+	read_min_datetime_elec timestamp,
+	read_max_datetime_elec timestamp encode bytedict,
+	read_min_readings_elec double precision,
+	read_max_readings_elec double precision,
+	read_months_diff_elec bigint encode delta,
+	read_days_diff_elec bigint encode bytedict,
+	no_of_ppc_rows bigint encode bytedict,
+	no_of_bpp_rows bigint encode bytedict,
+	read_consumption_elec double precision encode bytedict,
+	profile_class varchar(255),
+	tpr bigint,
+	ppc double precision encode bytedict,
+	bpp double precision encode bytedict,
+	sp integer,
+	total_reads bigint encode delta,
+	industry_eac_register double precision,
+	previous_ind_eac_estimates double precision encode bytedict,
+	latest_ind_eac_estimates double precision encode bytedict,
+	igloo_eac_v1 double precision,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+;
+
+alter table ref_calculated_eac_v1_audit owner to igloo_dw_uat_user
+;
+
+create table ref_calculated_eac_audit
+(
+	account_id bigint encode delta distkey,
+	elec_gsp varchar(255),
+	elec_ssc varchar(255),
+	meterpoint_id bigint encode delta,
+	supplyend_date timestamp,
+	meter_removed_date timestamp,
+	register_id bigint encode delta32k,
+	no_of_digits integer,
+	read_min_created_date_elec timestamp,
+	read_max_created_date_elec timestamp encode bytedict,
+	read_min_readings_elec double precision,
+	read_max_readings_elec double precision,
+	read_months_diff_elec bigint encode delta,
+	read_days_diff_elec bigint,
+	read_consumption_elec double precision encode bytedict,
+	ppc double precision,
+	industry_eac double precision,
+	igloo_eac double precision encode bytedict,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id)
+;
+
+alter table ref_calculated_eac_audit owner to igloo_dw_uat_user
+;
+
+create table ref_calculated_aq_v1
+(
+	account_id bigint encode delta,
+	gas_ldz varchar(255),
+	gas_imperial_meter_indicator varchar(255),
+	meterpoint_id bigint encode delta,
+	supplyend_date timestamp,
+	meter_removed_date timestamp,
+	register_id bigint encode delta32k,
+	no_of_digits integer,
+	read_min_datetime_gas timestamp,
+	read_max_datetime_gas timestamp encode bytedict,
+	read_min_readings_gas double precision,
+	read_max_readings_gas double precision,
+	read_months_diff_gas bigint,
+	read_days_diff_gas bigint,
+	read_consumption_gas double precision encode runlength,
+	cv double precision encode bytedict,
+	waalp double precision encode runlength,
+	rmq double precision encode runlength,
+	industry_aq_on_register double precision,
+	industry_aq_on_estimates double precision,
+	u double precision encode bytedict,
+	igloo_aq_v1 double precision encode runlength,
+	etlchange timestamp
+)
+;
+
+alter table ref_calculated_aq_v1 owner to igloo
+;
+
+create table ref_calculated_aq_v1_audit
+(
+	account_id bigint encode delta32k,
+	gas_ldz varchar(255),
+	gas_imperial_meter_indicator varchar(255),
+	meterpoint_id bigint encode delta32k,
+	supplyend_date timestamp,
+	meter_removed_date timestamp,
+	register_id bigint encode delta32k,
+	no_of_digits integer,
+	read_min_datetime_gas timestamp encode bytedict,
+	read_max_datetime_gas timestamp encode bytedict,
+	read_min_readings_gas double precision,
+	read_max_readings_gas double precision,
+	read_months_diff_gas bigint,
+	read_days_diff_gas bigint,
+	read_consumption_gas double precision encode runlength,
+	cv double precision encode bytedict,
+	waalp double precision encode runlength,
+	rmq double precision encode runlength,
+	industry_aq_on_register double precision,
+	industry_aq_on_estimates double precision,
+	u double precision encode bytedict,
+	igloo_aq_v1 double precision encode runlength,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+;
+
+alter table ref_calculated_aq_v1_audit owner to igloo_dw_uat_user
+;
+
+create table ref_consumption_accuracy_elec
+(
+	account_id bigint encode delta distkey,
+	reading_datetime timestamp encode bytedict,
+	pa_cons_elec double precision encode bytedict,
+	igl_ind_eac double precision encode bytedict,
+	ind_eac double precision encode bytedict,
+	quotes_eac double precision encode bytedict,
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, reading_datetime)
+;
+
+alter table ref_consumption_accuracy_elec owner to igloo_dw_uat_user
+;
+
+create table ref_consumption_accuracy_gas
+(
+	account_id bigint encode delta distkey,
+	reading_datetime timestamp encode bytedict,
+	pa_cons_gas double precision encode bytedict,
+	igl_ind_aq double precision encode runlength,
+	ind_aq double precision encode runlength,
+	quotes_aq double precision encode runlength,
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, reading_datetime)
+;
+
+alter table ref_consumption_accuracy_gas owner to igloo_dw_uat_user
+;
+
+create table ref_consumption_accuracy_gas_audit
+(
+	account_id bigint encode delta distkey,
+	reading_datetime timestamp encode bytedict,
+	pa_cons_gas double precision encode bytedict,
+	igl_ind_aq double precision encode runlength,
+	ind_aq double precision encode bytedict,
+	quotes_aq double precision,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, reading_datetime)
+;
+
+alter table ref_consumption_accuracy_gas_audit owner to igloo
+;
+
+create table ref_consumption_accuracy_elec_audit
+(
+	account_id bigint encode delta distkey,
+	reading_datetime timestamp encode bytedict,
+	pa_cons_elec double precision encode bytedict,
+	igl_ind_eac double precision encode bytedict,
+	ind_eac double precision encode bytedict,
+	quotes_eac double precision encode bytedict,
+	etlchangetype varchar(1),
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, reading_datetime)
+;
+
+alter table ref_consumption_accuracy_elec_audit owner to igloo
+;
+

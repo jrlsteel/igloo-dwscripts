@@ -389,3 +389,5 @@ where ac.status = 'Live';
 
 select etlchange, etlchangetype, count(*) from ref_account_status_audit
 group by etlchange, etlchangetype;
+
+
