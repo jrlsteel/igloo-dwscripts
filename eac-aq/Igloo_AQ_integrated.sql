@@ -6,8 +6,10 @@ select
     (select supplyenddate from ref_meterpoints rm
     where calc_params.account_id = rm.account_id
       and calc_params.meter_point_id = rm.meter_point_id) as supplyend_date,
-    --TODO: is the method to get the meter_removed_date correct?
-    (select removeddate from ref_meters rm where rm.meter_point_id = calc_params.meter_point_id) as meter_removed_date,
+    (select removeddate from ref_meters rm
+    where rm.account_id = calc_params.account_id
+      and rm.meter_point_id = calc_params.meter_point_id
+      and rm.meter_id = calc_params.meter_id) as meter_removed_date,
     register_id,
     no_of_digits,
     open_date as read_min_datetime_gas,
@@ -22,11 +24,11 @@ select
     meter_advance * 1.02264 * avg_cv * U * (1/3.6) as rmq,
     registers_eacaq as industry_aq_on_register,
     (select top 1 estimation_value from ref_estimates_gas_internal regi
-        where calc_params.account_id = regi.account_id and calc_params.register_id = regi.register_id
+        where calc_params.account_id = regi.account_id and calc_params.meterpointnumber = regi.mprn
         order by effective_from desc) as industry_aq_on_estimates,
     U as u,
     meter_advance * 1.02264 * avg_cv * U * (1/3.6) * 365 / cwaalp as igloo_aq_v1,
-    current_timestamp as etlchange
+    getdate() as etlchange
 from (
     select distinct
          read_pairs.account_id,
@@ -55,8 +57,10 @@ from (
          -- additional info for the output table
          rma_imp.attributes_attributevalue                                          as gas_imperial_meter_indicator,
          reg_gas.meter_point_id,
+         reg_gas.meter_id,
          reg_gas.registers_eacaq,
-         read_pairs.no_of_digits
+         read_pairs.no_of_digits,
+         read_pairs.meterpointnumber
     from
         -- open / close read pairs
         (select
@@ -71,6 +75,7 @@ from (
                 read_open.meterreadingdatetime as open_date,
                 read_open.readingvalue as open_val,
                 read_close.no_of_digits, -- just for output table
+                read_close.meterpointnumber,
 
                 --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
                 suitability_rank(datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime),2) as sr,
@@ -79,7 +84,7 @@ from (
             from temp_vw_ref_readings_all_valid read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
                 inner join temp_vw_ref_readings_all_valid read_open
                     on read_open.register_id = read_close.register_id
-                    and read_open.meterreadingsourceuid != 'DCOPENING'
+                    and read_open.meterreadingsourceuid not in ('DCOPENING','DC')
                     --The following line can be removed to allow matching of register reads prior to account creation (NRL/NOSI)
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
