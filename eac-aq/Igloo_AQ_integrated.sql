@@ -79,6 +79,7 @@ from (
             from temp_vw_ref_readings_all_valid read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
                 inner join temp_vw_ref_readings_all_valid read_open
                     on read_open.register_id = read_close.register_id
+                    and read_open.meterreadingsourceuid != 'DCOPENING'
                     --The following line can be removed to allow matching of register reads prior to account creation (NRL/NOSI)
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
