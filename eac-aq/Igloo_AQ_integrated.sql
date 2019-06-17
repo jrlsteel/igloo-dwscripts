@@ -76,7 +76,7 @@ from (
                 read_open.readingvalue as open_val,
                 read_close.no_of_digits, -- just for output table
                 read_close.meterpointnumber,
-
+                row_number() over (partition by read_close.account_id, read_close.register_id order by read_close.meterreadingdatetime) as most_recent_read,
                 --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
                 suitability_rank(datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime),2) as sr,
                 min(suitability_rank(datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime),2))
@@ -89,17 +89,17 @@ from (
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
             ) possible_read_pairs
-        where sr = best_sr and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
+        where sr = best_sr and most_recent_read = 1 and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
         ) read_pairs
         --get meter_point_id from ref_registers
-        inner join ref_registers reg_gas
-            on read_pairs.register_id = reg_gas.register_id
-        --LDZ for the meterpoint
-        inner join ref_meterpoints_attributes rma_ldz
-            on reg_gas.meter_point_id = rma_ldz.meter_point_id
-                   and rma_ldz.attributes_attributename = 'LDZ'
-        --Whether the meterpoint is Imperial or Metric
-        inner join ref_meterpoints_attributes rma_imp
-            on reg_gas.meter_point_id = rma_imp.meter_point_id
-                   and rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
+        left outer join ref_registers reg_gas
+            on read_pairs.account_id = reg_gas.account_id and read_pairs.register_id = reg_gas.register_id --LDZ for the meterpoint
+        left outer join ref_meterpoints_attributes rma_ldz
+            on reg_gas.account_id = rma_ldz.account_id and
+                reg_gas.meter_point_id = rma_ldz.meter_point_id and
+                rma_ldz.attributes_attributename = 'LDZ' --Whether the meterpoint is Imperial or Metric
+        left outer join ref_meterpoints_attributes rma_imp
+            on reg_gas.account_id = rma_imp.account_id and
+                reg_gas.meter_point_id = rma_imp.meter_point_id and
+                rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
     ) calc_params;
