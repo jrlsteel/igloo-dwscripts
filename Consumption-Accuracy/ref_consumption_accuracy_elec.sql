@@ -1,6 +1,17 @@
+drop view vw_ref_consumption_accuracy_elec;
+
+select count(*) from vw_ref_consumption_accuracy_elec
+where best_consumption is null
+
+select count(*) from vw_ref_consumption_accuracy_elec
+where best_consumption is not null;
+
+
+
 create or replace  view vw_ref_consumption_accuracy_elec as
 select con_elec.account_id,
        con_elec.reading_datetime,
+       rest.ind_firsteac_read_based_acc,
        rest.quote_firsteac_var,
        rest.ind_estimate_frequency as estimate_frequency,
        rest.igloo_estimate_age as estimate_age,
@@ -8,6 +19,7 @@ select con_elec.account_id,
        con_elec.igl_ind_eac,
        con_elec.ind_eac,
        con_elec.quotes_eac,
+       get_best_consumption(con_elec.igl_ind_eac, con_elec.ind_eac,con_elec.pa_cons_elec, con_elec.quotes_eac,'elec') as best_consumption,
        con_elec.etlchange
 from
      (select x.account_id                                                                                                                               as account_id,
@@ -104,59 +116,58 @@ where x.latest_read_per_register = 1
     -- and x.account_id in (1831, 23983, 1893,1854)
 group by x.account_id, x.latest_reading_datetime
 order by x.account_id, x.latest_reading_datetime) rest
-left outer join ref_consumption_accuracy_elec con_elec on rest.account_id = con_elec.account_id
+left outer join ref_consumption_accuracy_elec con_elec on rest.account_id = con_elec.account_id;
 
+-- --
+-- --
+-- --
+-- --
+-- -- SELECT account_id, reading_datetime, pa_cons_elec, igl_ind_eac, ind_eac, quotes_eac, etlchange
+-- -- FROM ref_consumption_accuracy_elec con_elec
+-- -- left outer join  ref_meterpoints mp on con_elec.account_id = mp.account_id;
+-- --
+-- --
+-- --
+-- --
+-- --
+-- -- select * from ref_consumption_accuracy_elec
+-- -- where account_id=2117
 --
 --
 --
 --
--- SELECT account_id, reading_datetime, pa_cons_elec, igl_ind_eac, ind_eac, quotes_eac, etlchange
--- FROM ref_consumption_accuracy_elec con_elec
--- left outer join  ref_meterpoints mp on con_elec.account_id = mp.account_id;
 --
 --
 --
 --
+-- select * from ref_estimates_elec_internal
+-- where account_id = 2117
+-- --and islive = true
+-- order by effective_from asc
 --
--- select * from ref_consumption_accuracy_elec
--- where account_id=2117
-
-
-
-
-
-
-
-
-select * from ref_estimates_elec_internal
-where account_id = 2117
---and islive = true
-order by effective_from asc
-
-select * from ref_meterpoints
-where account_id =2117
-
-select * from ref_meters
-where account_id = 2117
-
-select * from ref_estimates_elec_internal
-where account_id = 1831
---and islive = true
-order by effective_from asc
-
-
-
-
-select * from ref_meterpoints
-where account_id =1831
-
-select account_id
-from ref_meterpoints mp
-       inner join (select account_id, count(*)
-                   from ref_registers
-                   group by account_id
-                   having count(*) > 3
-                   order by account_id desc) reg on mp.account_id = reg.account_id
-
-
-
+-- select * from ref_meterpoints
+-- where account_id =2117
+--
+-- select * from ref_meters
+-- where account_id = 2117
+--
+-- select * from ref_estimates_elec_internal
+-- where account_id = 1831
+-- --and islive = true
+-- order by effective_from asc
+--
+--
+--
+--
+-- select * from ref_meterpoints
+-- where account_id =1831
+--
+-- select account_id
+-- from ref_meterpoints mp
+--        inner join (select account_id, count(*)
+--                    from ref_registers
+--                    group by account_id
+--                    having count(*) > 3
+--                    order by account_id desc) reg on mp.account_id = reg.account_id
+--
+--
