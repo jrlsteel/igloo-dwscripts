@@ -1,4 +1,5 @@
 -- AQ view
+create view vw_ref_customer_metrics_aq (
                         select
                         acc_reg.account_id,
                         q.gas_usage as quotes_aq,
@@ -47,7 +48,7 @@
                         left outer join ref_consumption_accuracy_gas cons_gas on cons_gas.account_id = acc_reg.account_id
                         -- inner join ref_readings_internal_valid ri on ri.account_id = su.external_id and ri.register_id = reg.register_id
                         -- inner join ref_readings_internal ri on ri.account_id = su.external_id and ri.register_id = reg.register_id
-
+)
 
 select * from ref_meterpoints where account_id = 1833;
 select * from ref_estimates_gas_internal where account_id = 1833;
