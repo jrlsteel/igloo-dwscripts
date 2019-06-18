@@ -27,7 +27,7 @@ diststyle key
 sortkey(etlchange, account_id)
 ;
 
-alter table ref_calculated_aq_audit owner to igloo_dw_uat_user
+alter table ref_calculated_aq_audit owner to igloo
 ;
 
 
@@ -65,7 +65,7 @@ create table ref_calculated_eac_v1_audit
 )
 ;
 
-alter table ref_calculated_eac_v1_audit owner to igloo_dw_uat_user
+alter table ref_calculated_eac_v1_audit owner to igloo
 ;
 
 create table ref_calculated_eac_audit
@@ -95,7 +95,7 @@ diststyle key
 sortkey(account_id)
 ;
 
-alter table ref_calculated_eac_audit owner to igloo_dw_uat_user
+alter table ref_calculated_eac_audit owner to igloo
 ;
 
 create table ref_calculated_aq_v1
@@ -158,7 +158,7 @@ create table ref_calculated_aq_v1_audit
 )
 ;
 
-alter table ref_calculated_aq_v1_audit owner to igloo_dw_uat_user
+alter table ref_calculated_aq_v1_audit owner to igloo
 ;
 
 create table ref_consumption_accuracy_elec
@@ -175,7 +175,7 @@ diststyle key
 sortkey(account_id, reading_datetime)
 ;
 
-alter table ref_consumption_accuracy_elec owner to igloo_dw_uat_user
+alter table ref_consumption_accuracy_elec owner to igloo
 ;
 
 create table ref_consumption_accuracy_gas
@@ -192,7 +192,7 @@ diststyle key
 sortkey(account_id, reading_datetime)
 ;
 
-alter table ref_consumption_accuracy_gas owner to igloo_dw_uat_user
+alter table ref_consumption_accuracy_gas owner to igloo
 ;
 
 create table ref_consumption_accuracy_gas_audit

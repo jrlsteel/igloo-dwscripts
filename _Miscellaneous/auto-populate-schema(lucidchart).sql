@@ -22,4 +22,4 @@ FROM information_schema.tables t
 --                                                            r.unique_constraint_schema = k2.constraint_schema AND
 --                                                            r.unique_constraint_name = k2.constraint_name
 WHERE t.TABLE_TYPE = 'BASE TABLE'
-  AND t.table_schema NOT IN ('information_schema', 'pg_catalog');
+  AND t.table_schema NOT IN ('information_schema', 'pg_catalog') and t.table_name in ('ref_readings_internal_nrl');

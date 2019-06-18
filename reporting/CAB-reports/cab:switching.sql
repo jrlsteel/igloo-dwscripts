@@ -8,7 +8,7 @@
 --        sum(case when switch_days_wl_1 = 21 then 1 else 0 end) as equal_to_21_asso,
 --        count(*) as total from (
 select
-       external_id as ensek_id,
+       external_id as account_id,
        mp.meterpointnumber as mpxn,
        mp.meterpointtype meterpoint_type,
        su.created_at as welcome_letter_date_wl_0,
@@ -43,7 +43,7 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Cancelled.In.Cooling.Off')
                         group by account_id) rse on rse.account_id = mp.account_id
 where mp.supplystartdate between '2019-01-01' and '2019-03-31'
-order by ensek_id, meterpoint_type
+order by account_id, meterpoint_type
 -- ) ens
 -- where switch_days_createdat < 21
 ;
