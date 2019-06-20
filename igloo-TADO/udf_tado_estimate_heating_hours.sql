@@ -7,10 +7,10 @@ as $$
     import logging
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    heating_hours_assumption = {'working_no_kids': [12, 8],
-                                'working_kids': [14, 12],
-                                'retired': [16, 16],
-                                'unknown': [13, 10]}
+    heating_hours_assumption = {'working_no_kids': [16, 10],
+                                'working_kids': [16, 12],
+                                'retired': [16, 14],
+                                'unknown': [16, 13]}
 
     heating_type = heating_type_input
     if type == 'base':
