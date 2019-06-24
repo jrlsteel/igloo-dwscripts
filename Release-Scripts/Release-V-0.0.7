@@ -1,0 +1,221 @@
+create table ref_nrl
+(
+	file_key varchar(512) distkey,
+	file_date timestamp,
+	file_name varchar(256),
+	transaction_type varchar(3),
+	supply_point_confirmation_reference varchar(256),
+	nomination_shipper_ref varchar(256),
+	ldz_identifier varchar(10),
+	exit_zone_identifier varchar(10),
+	end_user_category bigint,
+	supply_meter_point_reference bigint,
+	postcode_outcode varchar(10),
+	postcode_incode varchar(10),
+	meter_serial_number varchar(256),
+	convertor_serial_number varchar(256),
+	number_of_dials_or_digits smallint,
+	meter_status varchar(10),
+	correction_factor double precision,
+	imperial_meter_indicator varchar(1),
+	reading_factor double precision,
+	meter_reading_units bigint,
+	dre_present varchar(1),
+	supply_meter_point_aq double precision,
+	revised_supply_meter_point_aq double precision,
+	revised_supply_meter_point_aq_effective_date timestamp,
+	aq_calc_period_start timestamp,
+	aq_calc_period_end timestamp,
+	start_reading double precision,
+	end_reading double precision,
+	round_the_clock smallint,
+	number_of_exchanges smallint,
+	percentage_aq_change integer,
+	confirmation_effective_date timestamp,
+	transporter_nomination_reference bigint,
+	offer_number smallint,
+	supply_meter_point_soq double precision,
+	aq_correction_reason_code smallint,
+	backstop_date timestamp,
+	formula_year_smp_aq double precision,
+	formula_year_smp_soq double precision,
+	formula_year_smp_aq_start_reading double precision,
+	formula_year_smp_aq_end_reading double precision,
+	formula_year_smp_aq_start_date timestamp,
+	class_1_threshold_crosser_count smallint,
+	priority_consumer_count smallint,
+	meter_read_batch_frequency varchar(1),
+	mrf_type_code varchar(1),
+	market_category varchar(10),
+	euc_effective_date timestamp,
+	euc_change_reason_code varchar(10),
+	euc_description varchar(256),
+	supply_point_category varchar(10),
+	formula_year_smp_aq_start_reading_date timestamp,
+	formula_year_smp_aq_end_reading_date timestamp,
+	etlchange timestamp
+)
+diststyle key
+sortkey(file_date)
+;
+
+alter table ref_nrl owner to igloo
+;
+
+create table ref_readings_internal_nrl
+(
+	account_id bigint encode delta32k distkey,
+	meter_point_id bigint encode delta32k,
+	meter_id bigint encode delta32k,
+	meter_reading_id bigint,
+	register_id bigint encode delta32k,
+	register_reading_id bigint,
+	billable boolean,
+	haslivecharge boolean,
+	hasregisteradvance boolean,
+	meterpointnumber bigint,
+	meterpointtype varchar(1) encode bytedict,
+	meterreadingcreateddate timestamp,
+	meterreadingdatetime timestamp encode bytedict,
+	meterreadingsourceuid varchar(255),
+	meterreadingstatusuid varchar(255),
+	meterreadingtypeuid varchar(255),
+	meterserialnumber varchar(255),
+	readingvalue double precision,
+	registerreference varchar(255),
+	required boolean,
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, meter_point_id, meter_id, meterreadingcreateddate)
+;
+
+alter table ref_readings_internal_nrl owner to igloo
+;
+
+
+
+-- Testing Scripts --
+-- ref_nrl --
+-- before running batch
+select count(*) from ref_nrl; -- 0
+select count(*) from aws_s3_stage2_extracts.stage2_nrl; -- 120079
+
+-- SQL to check how many records will be inserted
+select count(*) from (select
+                        trim(s.file_key) as file_key,
+                        cast(trim(s.file_date) as timestamp) as file_date,
+                        trim(s.file_name) as file_name,
+                        trim(s.transaction_type) as transaction_type,
+                        trim(s.supply_point_confirmation_reference) as supply_point_confirmation_reference,
+                        trim(s.nomination_shipper_ref) as nomination_shipper_ref,
+                        trim(s.ldz_identifier) as ldz_identifier,
+                        trim(s.exit_zone_identifier) as exit_zone_identifier,
+                        cast(trim(s.end_user_category) as bigint) as end_user_category,
+                        cast(trim(s.supply_meter_point_reference) as bigint) as supply_meter_point_reference,
+                        trim(s.postcode_outcode) as postcode_outcode,
+                        trim(s.postcode_incode) as postcode_incode,
+                        trim(s.meter_serial_number) as meter_serial_number,
+                        trim(s.convertor_serial_number) as convertor_serial_number,
+                        cast(trim(s.number_of_dials_or_digits) as smallint) as number_of_dials_or_digits,
+                        trim(s.meter_status) as meter_status,
+                        cast(trim(s.correction_factor) as double precision) as correction_factor,
+                        trim(s.imperial_meter_indicator) as imperial_meter_indicator,
+                        cast(trim(s.reading_factor) as double precision) as reading_factor,
+                        cast(trim(s.meter_reading_units) as bigint) as meter_reading_units,
+                        trim(s.dre_present) as dre_present,
+                        cast(trim(s.supply_meter_point_aq) as double precision) as supply_meter_point_aq,
+                        cast(trim(s.revised_supply_meter_point_aq) as double precision) as revised_supply_meter_point_aq,
+                        cast(trim(s.revised_supply_meter_point_aq_effective_date) as timestamp) as revised_supply_meter_point_aq_effective_date,
+                        cast(trim(s.aq_calc_period_start) as timestamp) as aq_calc_period_start,
+                        cast(trim(s.aq_calc_period_end) as timestamp) as aq_calc_period_end,
+                        cast(trim(s.start_reading) as double precision) as start_reading,
+                        cast(trim(s.end_reading) as double precision) as end_reading,
+                        cast(trim(s.round_the_clock) as smallint) as round_the_clock,
+                        cast(trim(s.number_of_exchanges) as smallint) as number_of_exchanges,
+                        cast(trim(s.percentage_aq_change) as int) as percentage_aq_change,
+                        cast(trim(s.confirmation_effective_date) as timestamp) as confirmation_effective_date,
+                        cast(trim(s.transporter_nomination_reference) as bigint) as transporter_nomination_reference,
+                        cast(trim(s.offer_number) as smallint) as offer_number,
+                        cast(trim(s.supply_meter_point_soq) as double precision) as supply_meter_point_soq,
+                        cast(trim(s.aq_correction_reason_code) as smallint) as aq_correction_reason_code,
+                        cast(trim(s.backstop_date) as timestamp) as backstop_date,
+                        cast(trim(s.formula_year_smp_aq) as double precision) as formula_year_smp_aq,
+                        cast(trim(s.formula_year_smp_soq) as double precision) as formula_year_smp_soq,
+                        cast(trim(s.formula_year_smp_aq_start_reading) as double precision) as formula_year_smp_aq_start_reading,
+                        cast(trim(s.formula_year_smp_aq_end_reading) as double precision) as formula_year_smp_aq_end_reading,
+                        cast(trim(s.formula_year_smp_aq_start_date) as timestamp) as formula_year_smp_aq_start_date,
+                        cast(trim(s.class_1_threshold_crosser_count) as smallint) as class_1_threshold_crosser_count,
+                        cast(trim(s.priority_consumer_count) as smallint) as priority_consumer_count,
+                        trim(s.meter_read_batch_frequency) as meter_read_batch_frequency,
+                        trim(s.mrf_type_code) as mrf_type_code,
+                        trim(s.market_category) as market_category,
+                        cast(trim(s.euc_effective_date) as timestamp) as euc_effective_date,
+                        trim(s.euc_change_reason_code) as euc_change_reason_code,
+                        trim(s.euc_description) as euc_description,
+                        trim(s.supply_point_category) as supply_point_category,
+                        cast(trim(s.formula_year_smp_aq_start_reading_date) as timestamp) as formula_year_smp_aq_start_reading_date,
+                        cast(trim(s.formula_year_smp_aq_end_reading_date) as timestamp) as formula_year_smp_aq_end_reading_date,
+                        getdate() as etlchange
+                    from aws_s3_stage2_extracts.stage2_nrl s
+                    left outer join ref_nrl r on trim(r.file_key) = trim(s.file_key) and trim(r.file_name) = trim(s.file_name)
+                    where r.file_key is null or trim(r.file_key) = '') x;
+--120079
+
+
+-- SQL to check after batch runs
+select count(*) from ref_nrl; -- 120079
+select count(*) from aws_s3_stage2_extracts.stage2_nrl; -- 120079
+
+-- ref_readings_internal_nrl --
+select count(*) from ref_readings_internal_nrl; -- 0
+
+-- SQL to check how many records will be inserted
+select count(*) from
+(select mp.account_id,
+			 mp.meter_point_id,
+			 m.meter_id,
+			 cast(NULL as bigint)     as meter_reading_id,
+			 reg.register_id,
+			 cast(NULL as bigint)     as register_reading_id,
+			 true                     as billable,
+			 true                     as haslivecharge,
+			 true                     as hasregisteradvance,
+			 mp.meterpointnumber,
+			 mp.meterpointtype,
+			 cast(NULL as timestamp)  as meterreadingcreateddate,
+			 nrl.aq_calc_period_start as meterreadingdatetime_start, --> start reading
+			 nrl.aq_calc_period_end   as meterreadingdatetime_end,   --> end reading
+			 'NRL_START'              as meterreadingsourceuid_start,
+			 'NRL_END'                as meterreadingsourceuid_end,
+			 'VALID'                  as meterreadingstatusuid,
+			 'ACTUAL'                 as meterreadingtypeuid,
+			 m.meterserialnumber,
+			 nrl.start_reading        as readingvalue_start,
+			 nrl.end_reading          as readingvalue_end,
+			 'G'                      as registerreference,
+			 true                     as required,
+			 getdate()                as etlchange
+from ref_nrl nrl
+			 left outer join ref_meterpoints mp
+				 on mp.meterpointnumber = nrl.supply_meter_point_reference
+							and trunc(coalesce(mp.supplystartdate,to_date('1970-01-01', 'YYYY-MM-DD'))) = trunc(coalesce(nrl.confirmation_effective_date, to_date('1970-01-01', 'YYYY-MM-DD'))) and
+						mp.meterpointtype = 'G'
+			 left outer join ref_meters m
+				 on m.account_id = mp.account_id and m.meter_point_id = mp.meter_point_id and
+						trim(m.meterserialnumber) = trim(nrl.meter_serial_number)
+			 left outer join ref_registers reg
+				 on reg.account_id = mp.account_id and reg.meter_point_id = mp.meter_point_id and
+						reg.meter_id = m.meter_id
+where etlchange = (select max(r2.etlchange) from ref_nrl r2)) x;
+
+
+-- ref_readings_internal_nrl --
+select count(*) from ref_readings_internal_nrl; -- 248038
+select etlchange, meterreadingsourceuid, count(*) from ref_readings_internal_nrl
+group by etlchange, meterreadingsourceuid; -- 248038
+/*
+etlchange,meterreadingsourceuid,count
+2019-06-11 13:54:27.000000,NRL_END,124019
+2019-06-11 13:54:55.000000,NRL_START,124019
+*/

@@ -150,3 +150,41 @@ SELECT eac.account_id,
 
 alter table vw_consumption_account_accuracy owner to igloo
 ;
+
+
+create or replace view vw_consumption_accuracy as
+select reads.external_id as account_id,
+        e.igl_ind_eac,
+        '' as igl_ind_eac_tolerance_cons,
+        '' as igl_ind_eac_exception,
+        q.igl_ind_aq,
+        '' as igl_ind_aq_tolerance_cons,
+        '' as igl_ind_aq_exception,
+        e.pa_cons_elec,
+        '' as pa_cons_elec_tolerance_ind,
+        '' as pa_cons_elec_tolerance_quotes,
+        '' as pa_cons_elec_exception,
+        pa_cons_gas,
+        '' as pa_cons_gas_tolerance_ind,
+        '' as pa_cons_gas_tolerance_quotes,
+        '' as pa_cons_gas_exception,
+        e.ind_eac,
+        '' as ind_eac_tolerance,
+        '' as ind_eac_exception,
+        q.ind_aq,
+        '' as ind_aq_tolerance,
+        '' as ind_aq_exception,
+        e.quotes_eac,
+        q.quotes_aq
+        from
+(select su.external_id, su.registration_id, mp.meterpointnumber, reg.register_id, ri.register_reading_id, mt.meterserialnumber, reg.registers_eacaq, reg.registers_registerreference, ri.meterreadingdatetime,
+           max(ri.meterreadingdatetime) over (partition by su.external_id) as latest_reading_datetime,
+           row_number() over (partition by su.external_id, reg.register_id order by ri.meterreadingdatetime desc) as latest_read_per_register
+    from ref_cdb_supply_contracts su
+    inner join ref_meterpoints mp on mp.account_id = su.external_id and mp.meterpointtype = 'E'
+    inner join ref_meters mt on mt.account_id = su.external_id and mt.meter_point_id = mp.meter_point_id and mt.removeddate is null
+    inner join ref_registers reg on reg.account_id = su.external_id and reg.meter_id = mt.meter_id
+    inner join ref_readings_internal_valid ri on ri.account_id = su.external_id and ri.register_id = reg.register_id
+   ) reads
+   left outer join ref_consumption_accuracy_elec e on e.account_id = reads.external_id and reads.meterreadingdatetime = e.reading_datetime
+   left outer join ref_consumption_accuracy_gas q on q.account_id = reads.external_id and reads.meterreadingdatetime = q.reading_datetime

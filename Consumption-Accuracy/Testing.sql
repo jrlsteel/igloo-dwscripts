@@ -167,6 +167,12 @@ select etlchangetype, etlchange, count(*) as ca_elec_audit from ref_consumption_
 select etlchange, count(*) as ca_gas from ref_consumption_accuracy_gas group by etlchange; --0
 select etlchangetype, etlchange, count(*) as ca_gas_audit from ref_consumption_accuracy_gas_audit group by etlchangetype, etlchange; --0
 
+select e.*, e1.* from ref_calculated_eac_v1_audit e
+left outer join ref_calculated_eac_v1 e1 on e1.account_id = e.account_id and e1.register_id = e.register_id and e1.etlchange = '2019-05-29 13:18:29.931000'
+where e.etlchange = '2019-05-29 13:17:16.318000' and e1.account_id is null
+
+select * from ref_registers where account_id = 12474
+
 select count(*) from ref_readings_internal_valid_audit group by etlchangetype;
 
 select * from ref_consumption_accuracy_elec_audit where account_id = 38883;

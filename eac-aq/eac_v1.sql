@@ -104,8 +104,8 @@ from (select mp_elec.account_id                                                 
              inner join ref_meterpoints_attributes rma_pcl on mp_elec.account_id = rma_pcl.account_id and mp_elec.meter_point_id = rma_pcl.meter_point_id and
                                                               rma_pcl.attributes_attributename = 'Profile Class'
              inner join ref_meters mtrs_elec
-               on mtrs_elec.meter_point_id = mp_elec.meter_point_id and mtrs_elec.removeddate is NULL
-             inner join ref_registers reg_elec on mtrs_elec.meter_id = reg_elec.meter_id
+               on mtrs_elec.account_id = mp_elec.account_id and mtrs_elec.meter_point_id = mp_elec.meter_point_id and mtrs_elec.removeddate is NULL
+             inner join ref_registers reg_elec on reg_elec.account_id = mp_elec.account_id and mtrs_elec.meter_id = reg_elec.meter_id
              left outer join (select max(
                                        case when y.n = 1 then estimation_value else 0 end) over (partition by y.register_id) latest_eac,
                                      max(
@@ -134,7 +134,7 @@ from (select mp_elec.account_id                                                 
              left outer join ref_account_status ac on ac.account_id = mp_elec.account_id
 
       where mp_elec.meterpointtype = 'E'
-        and ac.account_id = 38259
+        and ac.account_id = 42890
         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
 --         and upper(ac.status) = 'LIVE'
       group by mp_elec.account_id,
