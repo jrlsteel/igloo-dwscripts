@@ -76,12 +76,14 @@ from (
                 read_open.readingvalue as open_val,
                 read_close.no_of_digits, -- just for output table
                 read_close.meterpointnumber,
-                row_number() over (partition by read_close.account_id, read_close.register_id order by read_close.meterreadingdatetime) as most_recent_read,
                 --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
                 suitability_rank(datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime),2) as sr,
                 min(suitability_rank(datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime),2))
                     over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_sr
-            from temp_vw_ref_readings_all_valid read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
+            from (select *
+                  from (select *, row_number() over (partition by account_id, register_id order by meterreadingdatetime desc) as r
+                        from temp_vw_ref_readings_all_valid where meterpointtype = 'G') ranked
+                  where r = 1 ) read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
                 inner join temp_vw_ref_readings_all_valid read_open
                     on read_open.register_id = read_close.register_id
                     and read_open.meterreadingsourceuid not in ('DCOPENING','DC')
@@ -89,7 +91,7 @@ from (
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
             ) possible_read_pairs
-        where sr = best_sr and most_recent_read = 1 and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
+        where sr = best_sr and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
         ) read_pairs
         --get meter_point_id from ref_registers
         left outer join ref_registers reg_gas
