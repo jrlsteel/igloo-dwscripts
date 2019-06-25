@@ -83,7 +83,7 @@ from (
             from (select *
                   from (select *, row_number() over (partition by account_id, register_id order by meterreadingdatetime desc) as r
                         from temp_vw_ref_readings_all_valid where meterpointtype = 'G') ranked
-                  where r = 1 ) read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
+                  where r = 1 ) read_close --TODO: read_close should be limited to "new reads" rather than calculating on every register every time
                 inner join temp_vw_ref_readings_all_valid read_open
                     on read_open.register_id = read_close.register_id
                     and read_open.meterreadingsourceuid not in ('DCOPENING','DC')
@@ -91,7 +91,7 @@ from (
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
             ) possible_read_pairs
-        where sr = best_sr and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
+        where sr = best_sr and open_date >= '2014-10-01' --the oldest date we have WAALP data for
         ) read_pairs
         --get meter_point_id from ref_registers
         left outer join ref_registers reg_gas
@@ -105,3 +105,12 @@ from (
                 reg_gas.meter_point_id = rma_imp.meter_point_id and
                 rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
     ) calc_params;
+
+
+/*select t.*,
+       case when r.account_id is null then 'n' else 'u' end as etlchangetype,
+       current_timestamp                                    as etlchange
+from temp_new t
+         left outer join temp_current r on t.account_id = r.account_id and t.register_id = r.register_id
+where t.read_max_created_date_elec != r.read_max_created_date_elec
+   or r.account_id is null*/
