@@ -1,3 +1,6 @@
+-- Tables which need to be updated BEFORE this runs: ref_readings_internal_X where X in (valid, nosi, nrl)
+
+create table temp_new_AQs as
 select
     account_id,
     LDZ as gas_ldz,
@@ -82,16 +85,16 @@ from (
                     over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_sr
             from (select *
                   from (select *, row_number() over (partition by account_id, register_id order by meterreadingdatetime desc) as r
-                        from temp_vw_ref_readings_all_valid where meterpointtype = 'G') ranked
-                  where r = 1 ) read_close --TODO: this line should be replaced with "new reads" rather than calculating on every read
-                inner join temp_vw_ref_readings_all_valid read_open
+                        from ref_readings_internal_valid where etlchange >= getdate() and meterpointtype = 'G') ranked
+                  where r = 1 ) read_close
+                inner join vw_readings_AQ_all read_open
                     on read_open.register_id = read_close.register_id
                     and read_open.meterreadingsourceuid not in ('DCOPENING','DC')
                     --The following line can be removed to allow matching of register reads prior to account creation (NRL/NOSI)
                     --and read_open.account_id = read_close.account_id
                     and datediff(days,read_open.meterreadingdatetime,read_close.meterreadingdatetime) between 273 and (365*3)
             ) possible_read_pairs
-        where sr = best_sr and open_date >= '2017-10-01' --TODO: adjust this open_date clause when we have more ALP data
+        where sr = best_sr and open_date >= '2014-10-01' --the oldest date we have WAALP data for
         ) read_pairs
         --get meter_point_id from ref_registers
         left outer join ref_registers reg_gas
@@ -105,3 +108,29 @@ from (
                 reg_gas.meter_point_id = rma_imp.meter_point_id and
                 rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
     ) calc_params;
+
+-- Add changes to audit table
+insert into ref_calculated_aq_v1_audit
+select t.*,
+       case when r.account_id is null then 'n' else 'u' end as etlchangetype,
+       current_timestamp                                    as etlchange
+from temp_new_AQs t
+         left outer join ref_calculated_aq_v1 r on t.account_id = r.account_id and t.register_id = r.register_id;
+/*where t.read_max_datetime_gas != r.read_max_created_date_elec
+   or r.account_id is null*/
+
+-- Insert new data into ref_calculated_aq_v1
+insert into ref_calculated_aq_v1
+select * from temp_new_AQs;
+
+-- Remove data being replaced from ref_calculated_aq_v1
+delete
+from ref_calculated_aq_v1 using (select x.account_id, x.register_id, x.etlchange
+                                 from (select e.*,
+                                              row_number()
+                                              over (partition by account_id, register_id order by etlchange desc) as rn
+                                       from ref_calculated_eac_v1 e) x
+                                  where x.rn > 1) x1
+where x1.account_id = ref_calculated_aq_v1.account_id
+  and x1.register_id = ref_calculated_aq_v1.register_id
+  and x1.etlchange = ref_calculated_aq_v1.etlchange;
