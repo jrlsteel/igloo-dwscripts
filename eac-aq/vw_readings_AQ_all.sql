@@ -49,20 +49,20 @@ from (
                       meterpointtype
                from ref_readings_internal_nosi
 
-               union
+               /*union
 
                select distinct account_id,
-                      register_id,
-                      meterpointnumber,
-                      meter_point_id,
-                      meter_id,
-                      readingvalue,
-                      meterreadingdatetime,
-                      meterreadingsourceuid,
-                      'nrl' as from_table,
-                      meter_reading_id,
-                      meterpointtype
-               from ref_readings_internal_nrl
+                               register_id,
+                               meterpointnumber,
+                               meter_point_id,
+                               meter_id,
+                               readingvalue,
+                               meterreadingdatetime,
+                               meterreadingsourceuid,
+                               'nrl' as from_table,
+                               meter_reading_id,
+                               meterpointtype
+               from ref_readings_internal_nrl*/
            ) readings_all
 
       where readings_all.readingvalue notnull
