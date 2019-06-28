@@ -56,14 +56,13 @@ select coalesce(elec_stats.account_id, gas_stats.account_id)                    
        gas_stats.end_date                                                               as Gas_ED,
        elec_stats.num_meterpoints                                                       as num_elec_MPNs,
        coalesce(gas_stats.num_meterpoints, 0)                                           as num_gas_MPNs,
-       elec_stats.industry_EAC                                                          as EAC_industry,
-       gas_stats.industry_AQ                                                            as AQ_industry,
-       elec_stats.igloo_EAC                                                             as EAC_Igloo,
-       gas_stats.igloo_AQ                                                               as AQ_Igloo,
+       coalesce(nullif(cons_acc_elec.ind_eac, 0), elec_stats.industry_EAC)              as EAC_industry,
+       coalesce(nullif(cons_acc_gas.ind_aq, 0), gas_stats.industry_AQ)                  as AQ_industry,
+       coalesce(nullif(cons_acc_elec.igl_ind_eac, 0), elec_stats.igloo_EAC)             as EAC_Igloo,
+       coalesce(nullif(cons_acc_gas.igl_ind_aq, 0), gas_stats.igloo_AQ)                 as AQ_Igloo,
        case
            when dd_pay_layers.wu_app_current then dd_pay_layers.dd_total
            else dd_pay_layers.dd_total - dd_pay_layers.wu_amount end                    as reg_pay_amount,
-       --most_recent_dd.amount                                                            as last_dd,
        dd_pay_layers.dd_total - dd_pay_layers.wu_amount                                 as reg_pay_amount_ex_wu,
        dd_pay_layers.wu_amount                                                          as wu_amount,
        dd_pay_layers.wu_amount > 0                                                      as wu_this_year,
@@ -128,6 +127,7 @@ from (select mp_elec.account_id,
         and (greatest(supplystartdate, associationstartdate) < least(supplyenddate, associationenddate)
           or (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
       group by mp_elec.account_id) elec_stats
+         left join ref_consumption_accuracy_elec cons_acc_elec on elec_stats.account_id = cons_acc_elec.account_id
          full join
      -- GAS ---------------------------------------------------------------------------------------------- GAS
          (select mp_gas.account_id,
@@ -181,8 +181,8 @@ from (select mp_elec.account_id,
               or (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
           group by mp_gas.account_id) gas_stats
      on gas_stats.account_id = elec_stats.account_id
-
-         -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
+         left join ref_consumption_accuracy_gas cons_acc_gas on gas_stats.account_id = cons_acc_gas.account_id
+    -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
          left join ref_cdb_supply_contracts sc on elec_stats.account_id = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
