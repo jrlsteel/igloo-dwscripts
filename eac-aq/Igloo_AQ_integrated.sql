@@ -85,11 +85,16 @@ from (
                                 datediff(days, read_open.meterreadingdatetime, read_close.meterreadingdatetime), 2))
                         over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_sr
                     from (select *
-                          from (select *,
+                          from (select rriv.*,
                                        row_number()
-                                       over (partition by account_id, register_id order by meterreadingdatetime desc) as r
-                                from ref_readings_internal_valid
-                                where /*etlchange >= getdate() and*/ meterpointtype = 'G') ranked
+                                       over (partition by rriv.account_id, rriv.register_id order by rriv.meterreadingdatetime desc) as r
+                                from ref_readings_internal_valid rriv
+                                    inner join ref_calculated_aq_v1 rcaq
+                                        on rriv.account_id = rcaq.account_id and
+                                           rriv.register_id = rcaq.register_id and
+                                           rriv.meterpointtype = 'G' and
+                                           rriv.meterreadingdatetime > rcaq.etlchange
+                              ) ranked
                           where r = 1) read_close
                              inner join vw_readings_AQ_all read_open
                                         on read_open.register_id = read_close.register_id
