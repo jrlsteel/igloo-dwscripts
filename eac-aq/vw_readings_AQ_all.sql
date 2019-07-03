@@ -1,5 +1,5 @@
-
-create view vw_readings_AQ_all as
+drop view vw_readings_AQ_all;
+create or replace view vw_readings_AQ_all as
 
 select
     account_id,
@@ -11,7 +11,8 @@ select
     meterreadingdatetime,
     meterreadingsourceuid,
     meter_reading_id,
-    meterpointtype
+    meterpointtype,
+    etlchange
 from (
       select *,
              -- this rank will be 1 for any unique values and where a duplicate has occurred the values shall be taken
@@ -31,7 +32,8 @@ from (
                       meterreadingsourceuid,
                       'ensek' as from_table,
                       meter_reading_id,
-                      meterpointtype
+                      meterpointtype,
+                      etlchange
                from ref_readings_internal_valid
 
                union
@@ -42,11 +44,12 @@ from (
                       meter_point_id,
                       meter_id,
                       readingvalue,
-                      meterreadingdatetime,
+                      nullif(meterreadingdatetime,'1970-01-01'),
                       meterreadingsourceuid,
                       'nosi' as from_table,
                       meter_reading_id,
-                      meterpointtype
+                      meterpointtype,
+                      etlchange
                from ref_readings_internal_nosi
 
                /*union
