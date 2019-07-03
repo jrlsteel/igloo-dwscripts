@@ -68,7 +68,7 @@ from (
                from ref_readings_internal_nrl*/
            ) readings_all
 
-      where readings_all.readingvalue notnull
+      where readings_all.readingvalue notnull and meterpointtype = 'G'
   ) ranked
 where uniqueness_rank = 1
 order by account_id, register_id, meterreadingdatetime
