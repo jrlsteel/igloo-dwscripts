@@ -1,6 +1,8 @@
 drop view vw_readings_AQ_all;
 create or replace view vw_readings_AQ_all as
 
+/*drop table temp_readings_all;
+create table temp_readings_all as*/
 select
     account_id,
     register_id,
@@ -19,7 +21,7 @@ from (
              -- from a table in order of ensek (ref_readings_internal_valid), nosi, nrl; whichever is present
              -- it will not distinguish between duplicates coming from the same table
              rank() over (partition by account_id, register_id, meterreadingdatetime, readingvalue
-                 order by from_table asc) as uniqueness_rank
+                 order by from_table /*asc*/) as uniqueness_rank
 
       from (
                select account_id,
@@ -35,7 +37,7 @@ from (
                       meterpointtype,
                       etlchange
                from ref_readings_internal_valid
-
+/*
                union
 
                select account_id,
@@ -51,8 +53,8 @@ from (
                       meterpointtype,
                       etlchange
                from ref_readings_internal_nosi
-
-               /*union
+*/
+               union
 
                select distinct account_id,
                                register_id,
@@ -64,8 +66,10 @@ from (
                                meterreadingsourceuid,
                                'nrl' as from_table,
                                meter_reading_id,
-                               meterpointtype
-               from ref_readings_internal_nrl*/
+                               meterpointtype,
+                                etlchange
+               from ref_readings_internal_nrl
+               where readingvalue notnull
            ) readings_all
 
       where readings_all.readingvalue notnull and meterpointtype = 'G'
