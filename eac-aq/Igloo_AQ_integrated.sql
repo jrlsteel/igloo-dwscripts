@@ -1,7 +1,5 @@
 -- Tables which need to be updated BEFORE this runs: ref_readings_internal_X where X in (valid, nosi, nrl)
-
-drop table temp_new_AQs;
-create table temp_new_AQs as
+insert into ref_calculated_Igl_ind_aq
 select account_id,
        LDZ                                                             as gas_ldz,
        gas_imperial_meter_indicator,
@@ -27,7 +25,7 @@ select account_id,
           and calc_params.meterpointnumber = regi.mprn
         order by effective_from desc)                                  as industry_aq_on_estimates,
        U                                                               as u,
-       meter_advance * 1.02264 * avg_cv * U * (1 / 3.6) * 365 / cwaalp as igloo_aq_v1,
+       meter_advance * 1.02264 * avg_cv * U * (1 / 3.6) * 365 / cwaalp as igl_ind_aq,
        getdate()                                                       as etlchange
 from (
          select distinct read_pairs.account_id,
@@ -78,22 +76,23 @@ from (
                         read_close.no_of_digits, -- just for output table
                         read_close.meterpointnumber,
                         --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
-                        suitability_rank(
+                        open_read_suitability_score(
                                 datediff(days, read_open.meterreadingdatetime, read_close.meterreadingdatetime),
-                                2)                                                                                         as sr,
-                        min(suitability_rank(
+                                2)                                                                                         as orss,
+                        min(open_read_suitability_score(
                                 datediff(days, read_open.meterreadingdatetime, read_close.meterreadingdatetime), 2))
-                        over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_sr
+                        over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_orss
                     from (select *
                           from (select rriv.*,
                                        row_number()
                                        over (partition by rriv.account_id, rriv.register_id order by rriv.meterreadingdatetime desc) as r
                                 from ref_readings_internal_valid rriv
-                                    inner join ref_calculated_aq_v1 rcaq
+                                    left join ref_calculated_Igl_ind_aq rcaq
                                         on rriv.account_id = rcaq.account_id and
-                                           rriv.register_id = rcaq.register_id and
-                                           rriv.meterpointtype = 'G' and
-                                           rriv.meterreadingdatetime > rcaq.etlchange
+                                           rriv.register_id = rcaq.register_id
+                                where rriv.meterpointtype = 'G' and
+                                      (rriv.meterreadingdatetime > rcaq.read_max_datetime_gas or
+                                       rcaq.read_max_datetime_gas isnull)
                               ) ranked
                           where r = 1) read_close
                              inner join vw_readings_AQ_all read_open
@@ -104,7 +103,7 @@ from (
                                             and datediff(days, read_open.meterreadingdatetime,
                                                          read_close.meterreadingdatetime) between 273 and (365 * 3)
                    ) possible_read_pairs
-              where sr = best_sr
+              where orss = best_orss
                 and open_date >= '2014-10-01' --the oldest date we have WAALP data for
              ) read_pairs
                  --get meter_point_id from ref_registers
@@ -127,30 +126,3 @@ from (
                               rm.meter_point_id = reg_gas.meter_point_id and
                               rm.meter_id = reg_gas.meter_id
      ) calc_params;
-
--- Add changes to audit table
-insert into ref_calculated_aq_v1_audit
-select t.*,
-       case when r.account_id is null then 'n' else 'u' end as etlchangetype,
-       current_timestamp                                    as etlchange
-from temp_new_AQs t
-         left outer join ref_calculated_aq_v1 r on t.account_id = r.account_id and t.register_id = r.register_id;
-/*where t.read_max_datetime_gas != r.read_max_created_date_elec
-   or r.account_id is null*/
-
--- Insert new data into ref_calculated_aq_v1
-insert into ref_calculated_aq_v1
-select *
-from temp_new_AQs;
-
--- Remove data being replaced from ref_calculated_aq_v1
-delete
-from ref_calculated_aq_v1 using (select x.account_id, x.register_id, x.etlchange
-                                 from (select e.*,
-                                              row_number()
-                                              over (partition by account_id, register_id order by etlchange desc) as rn
-                                       from ref_calculated_eac_v1 e) x
-                                 where x.rn > 1) x1
-where x1.account_id = ref_calculated_aq_v1.account_id
-  and x1.register_id = ref_calculated_aq_v1.register_id
-  and x1.etlchange = ref_calculated_aq_v1.etlchange;
