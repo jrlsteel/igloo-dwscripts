@@ -1,4 +1,4 @@
-create function suitability_rank(bigint, integer) returns decimal
+create or replace function open_read_suitability_score(bigint, integer) returns decimal
 --                             (days_diff, method#)
     stable
     language sql

@@ -112,11 +112,12 @@ from (
     from
         (select
             reads.*,
+            nrl.*,
             datediff(days,reads.read_date,reads.closing_reading_date) as days_diff,
 
             -- METHOD 2 - 12m through to 9m, then 12m through to 3y
-            suitability_rank(datediff(days,reads.read_date,reads.closing_reading_date),2)   as selection_rank_2,
-            min(suitability_rank(datediff(days,reads.read_date,reads.closing_reading_date),2))
+            open_read_suitability_score(datediff(days,reads.read_date,reads.closing_reading_date),2)   as selection_rank_2,
+            min(open_read_suitability_score(datediff(days,reads.read_date,reads.closing_reading_date),2))
                 over (partition by reads.AQ_app_from,reads.register_id)                     as selection_rank_2_min,
 
             (select max(r.readingvalue)
@@ -140,10 +141,6 @@ from (
         from
             (select
                 regi.*,
-
-                nrl.file_date,
-                nrl.aq_calc_period_start,
-                nrl.start_reading,
 
                 rriv.account_id,
                 rriv.register_id,
@@ -179,15 +176,12 @@ from (
             from
                  -- Get AQ estimations from ref_estimates_gas_internal
                 (select
-                    (select top 1 estimation_value from ref_estimates_gas_internal regi_next
-                    where regi.register_id = regi_next.register_id and regi.account_id = regi_next.account_id
-                        and regi_next.effective_from > regi.effective_from
-                    order by regi_next.effective_from asc) as ind_AQ,
+                    lead(estimation_value) over (partition by register_id, account_id order by effective_from) as ind_AQ,
                     estimation_value as prev_ind_AQ,
                     effective_from as AQ_app_from,
 
-                    last_day(add_months(effective_from,-2)) + 10 as read_window_end,
-                    last_day(add_months(effective_from,-3)) + 11 as read_window_start,
+                    last_day(add_months(effective_from,-1)) + 10 as read_window_end,
+                    last_day(add_months(effective_from,-2)) + 11 as read_window_start,
                     mprn
                 from
                     ref_estimates_gas_internal regi
@@ -215,11 +209,13 @@ from (
                 inner join ref_meterpoints_attributes rma_imp
                     on rriv.meter_point_id = rma_imp.meter_point_id
                         and rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
-                inner join ref_nrl nrl
-                    on nrl.supply_meter_point_reference = regi.mprn
-                        and last_day(nrl.file_date) = last_day(regi.AQ_app_from)
+
             where datediff(days,read_date,closing_reading_date)>=273
             ) reads
+            inner join ref_nrl nrl
+                    on nrl.supply_meter_point_reference = reads.mprn
+                        --and last_day(nrl.file_date) = last_day(regi.AQ_app_from)
+                        and nrl.aq_calc_period_end = reads.closing_reading_date
         where datediff(days, closing_reading_date, most_recent_read) >= 273
         ) reads_oc
     where reads_oc.selection_rank_2 = reads_oc.selection_rank_2_min and reads_oc.read_date > '2014-10-01'
