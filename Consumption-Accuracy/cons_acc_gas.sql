@@ -50,7 +50,7 @@ from (
                                            su.external_id = ind_aq.account_id and
                                            mp.meterpointnumber = ind_aq.mprn and
                                            reg.registers_registerreference = ind_aq.register_id and
-                                           mt.meterserialnumber = ind_aq.serial_number
+                                           mt.meterserialnumber = ind_aq.serial_number --TODO: This join needs to be through meterpoint ref number, serial number etc. Register id in regi isn't the same field as everywhere else
                     ) reg_level
                group by account_id, registration_id
               ) acc_aggs
