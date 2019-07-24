@@ -56,10 +56,10 @@ select coalesce(elec_stats.account_id, gas_stats.account_id)                    
        gas_stats.end_date                                                               as Gas_ED,
        elec_stats.num_meterpoints                                                       as num_elec_MPNs,
        coalesce(gas_stats.num_meterpoints, 0)                                           as num_gas_MPNs,
-       coalesce(nullif(cons_acc_elec.ind_eac, 0), elec_stats.industry_EAC)              as EAC_industry,
-       coalesce(nullif(cons_acc_gas.ind_aq, 0), gas_stats.industry_AQ)                  as AQ_industry,
-       coalesce(nullif(cons_acc_elec.igl_ind_eac, 0), elec_stats.igloo_EAC)             as EAC_Igloo,
-       coalesce(nullif(cons_acc_gas.igl_ind_aq, 0), gas_stats.igloo_AQ)                 as AQ_Igloo,
+       nullif(cons_acc_elec.ind_eac, 0)                                                 as EAC_industry,
+       nullif(cons_acc_gas.ind_aq, 0)                                                   as AQ_industry,
+       nullif(cons_acc_elec.igl_ind_eac, 0)                                             as EAC_Igloo,
+       nullif(cons_acc_gas.igl_ind_aq, 0)                                               as AQ_Igloo,
        case
            when dd_pay_layers.wu_app_current then dd_pay_layers.dd_total
            else dd_pay_layers.dd_total - dd_pay_layers.wu_amount end                    as reg_pay_amount,
@@ -69,8 +69,8 @@ select coalesce(elec_stats.account_id, gas_stats.account_id)                    
        most_recent_dd.payment_day                                                       as reg_pay_date,
        q.projected_savings                                                              as projected_savings,
        most_recent_transaction.currentbalance                                           as balance,
-       ((365 * lr.elec_sc) + (elec_stats.industry_EAC * lr.elec_ur)) / 100              as elec_annual_spend,
-       ((365 * lr.gas_sc) + (gas_stats.industry_AQ * lr.gas_ur)) / 100                  as gas_annual_spend,
+       ((365 * lr.elec_sc) + (cons_acc_elec.ind_eac * lr.elec_ur)) / 100                as elec_annual_spend,
+       ((365 * lr.gas_sc) + (cons_acc_gas.ind_aq * lr.gas_ur)) / 100                    as gas_annual_spend,
        elec_stats.reg_status                                                            as elec_reg_status,
        gas_stats.reg_status                                                             as gas_reg_status,
        case when elec_stats.reg_status = 'Final' then elec_stats.losstype else null end as elec_loss_type,
@@ -84,8 +84,8 @@ from (select mp_elec.account_id,
              min(greatest(supplystartdate, associationstartdate))            as start_date,
              nullif(max(coalesce(least(supplyenddate, associationenddate),
                                  current_date + 1000)), current_date + 1000) as end_date,
-             sum(igloo_eac.igloo_eac_v1)                                     as igloo_EAC,
-             sum(industry_eac.estimation_value)                              as industry_EAC,
+             --sum(igloo_eac.igl_ind_eac)                                      as igloo_EAC,
+             --sum(industry_eac.estimation_value)                              as industry_EAC,
              udf_meterpoint_status(
                      min(greatest(supplystartdate, associationstartdate)),
                      nullif(max(coalesce(least(supplyenddate, associationenddate), current_date + 1000)),
@@ -102,11 +102,11 @@ from (select mp_elec.account_id,
             from ref_meterpoints
             where meterpointtype = 'E') mp_elec
                left join
-           (select sum(igloo_eac_v1) over (partition by account_id, meterpoint_id, trunc(etlchange))  as igloo_eac_v1,
+           (select sum(igl_ind_eac) over (partition by account_id, meterpoint_id, trunc(etlchange))   as igl_ind_eac,
                    account_id,
                    meterpoint_id,
                    row_number() over (partition by account_id, meterpoint_id order by etlchange desc) as rn
-            from ref_calculated_eac_v1
+            from ref_calculated_igl_ind_eac
             where meter_removed_date isnull) igloo_eac
            on igloo_eac.account_id = mp_elec.account_id and igloo_eac.meterpoint_id = mp_elec.meter_point_id and
               igloo_eac.rn = 1
@@ -135,8 +135,8 @@ from (select mp_elec.account_id,
                  min(greatest(supplystartdate, associationstartdate))            as start_date,
                  nullif(max(coalesce(least(supplyenddate, associationenddate),
                                      current_date + 1000)), current_date + 1000) as end_date,
-                 sum(igloo_aq.igloo_aq_v1)                                       as igloo_AQ,
-                 sum(industry_aq.estimation_value)                               as industry_AQ,
+                 --sum(igloo_aq.igl_ind_aq)                                        as igloo_AQ,
+                 --sum(industry_aq.estimation_value)                               as industry_AQ,
                  udf_meterpoint_status(
                          min(greatest(supplystartdate, associationstartdate)),
                          nullif(max(coalesce(least(supplyenddate, associationenddate), current_date + 1000)),
@@ -155,11 +155,11 @@ from (select mp_elec.account_id,
                 from ref_meterpoints
                 where meterpointtype = 'G') mp_gas
                    left join
-               (select igloo_aq_v1,
+               (select igl_ind_aq,
                        account_id,
                        meterpoint_id,
                        row_number() over (partition by account_id, register_id order by etlchange desc) as rn
-                from ref_calculated_aq_v1
+                from ref_calculated_igl_ind_aq
                 where meter_removed_date isnull) igloo_aq
                on igloo_aq.account_id = mp_gas.account_id and igloo_aq.meterpoint_id = mp_gas.meter_point_id and
                   igloo_aq.rn = 1
