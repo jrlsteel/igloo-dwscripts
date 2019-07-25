@@ -19,7 +19,7 @@ from (
                 -- this rank will be 1 for any unique values and where a duplicate has occurred the values shall be taken
                 -- from a table in order of ensek (ref_readings_internal_valid), nosi, nrl; whichever is present
                 -- it will not distinguish between duplicates coming from the same table
-                rank() over (partition by account_id, register_id, meterreadingdatetime, readingvalue
+                row_number() over (partition by account_id, register_id, meterreadingdatetime
                     order by from_table /*asc*/) as uniqueness_rank
 
          from (
