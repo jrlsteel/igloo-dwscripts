@@ -34,7 +34,7 @@ from
                       supplyenddate is not null and
                       supplystartdate > supplyenddate then 1 else 0 end as has_enddate_before_startdate
             from ref_cdb_supply_contracts su
-                  left outer join ref_meterpoints mp on su.external_id = mp.account_id
+                  left outer join ref_meterpoints_raw mp on su.external_id = mp.account_id
                   left outer join temp_ref_annual_statements ans on ans.account_id = su.external_id and ans.energytype = mp.meterpointtype
             where
                   su.external_id is not null and

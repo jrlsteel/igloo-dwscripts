@@ -24,7 +24,7 @@ select
 
 from ref_cdb_supply_contracts su
       inner join ref_meterpoints mp on mp.account_id = su.external_id
-      left outer join (select account_id from ref_registrations_status_gas_audit
+      left outer join (select account_id from ref_registrations_meterpoints_status_gas_audit
                         where status in
                           ('Tracker.Registration.Gas.Objection.Upheld',
                            'Tracker.Registration.Gas.Objection.Received',
@@ -33,7 +33,7 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Gas.Abandoned',
                            'Tracker.Registration.Gas.Cancelled.in.Cooling.Off')
                         group by account_id) rsg on rsg.account_id = mp.account_id
-      left outer join (select account_id from ref_registrations_status_elec_audit rse
+      left outer join (select account_id from ref_registrations_meterpoints_status_elec_audit
                         where status in
                           ('Tracker.Registration.Objection.Upheld',
                             'Tracker.Registration.Objection.Received',
@@ -42,7 +42,7 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Withdrawn',
                            'Tracker.Registration.Cancelled.In.Cooling.Off')
                         group by account_id) rse on rse.account_id = mp.account_id
-where mp.supplystartdate between '2019-01-01' and '2019-03-31'
+where mp.supplystartdate between '2019-04-01' and '2019-06-30'
 order by account_id, meterpoint_type
 -- ) ens
 -- where switch_days_createdat < 21
