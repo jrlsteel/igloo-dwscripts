@@ -6,7 +6,7 @@
 -- 26-04-2019 Added  datediff(days,association_start_wl_1, wl0_transposed_date) as new_switch_days_asw11_and_w10td
 
 select ens.account_id,
-       '' as ET,
+--        '' as ET,
        ens.mpxn,
        ens.meterpoint_type,
        ens.welcome_letter_date_wl_0,
@@ -56,31 +56,31 @@ select
        datediff(days,su.created_at, mp.associationstartdate) as diff_btw_wl_0_wl_1,
        datediff(days,su.created_at, mp.supplystartdate) as switch_days_wl_0,
        datediff(days,mp.associationstartdate, mp.supplystartdate) as switch_days_wl_1,
-       case when rsg.account_id is not null or rsmg.account_id is not null then 'Y' else 'N' end as gas_had_negative_status,
-       case when rse.account_id is not null or rsme.account_id is not null then 'Y' else 'N' end as elec_had_negative_status,
+       case when rsmg.account_id is not null then 'Y' else 'N' end as gas_had_negative_status,
+       case when rsme.account_id is not null then 'Y' else 'N' end as elec_had_negative_status,
        case when mp.supplyenddate is not null and mp.supplystartdate > mp.supplyenddate
               then 'Y' else 'N' end as end_before_start
 
 from ref_cdb_supply_contracts su
-      inner join ref_meterpoints mp on mp.account_id = su.external_id
-      left outer join (select account_id from ref_registrations_status_gas_audit
-                        where status in
-                          ('Tracker.Registration.Gas.Objection.Upheld',
-                           'Tracker.Registration.Gas.Objection.Received',
-                           'Tracker.Registration.Gas.Objection.Lifted',
-                           'Tracker.Registration.Gas.Registration.Rejected',
-                           'Tracker.Registration.Gas.Abandoned',
-                           'Tracker.Registration.Gas.Cancelled.in.Cooling.Off')
-                        group by account_id) rsg on rsg.account_id = mp.account_id
-      left outer join (select account_id from ref_registrations_status_elec_audit
-                        where status in
-                          ('Tracker.Registration.Objection.Upheld',
-                            'Tracker.Registration.Objection.Received',
-                           'Tracker.Registration.Objection.Lifted',
-                           'Tracker.Registration.Registration.Rejected',
-                           'Tracker.Registration.Withdrawn',
-                           'Tracker.Registration.Cancelled.In.Cooling.Off')
-                        group by account_id) rse on rse.account_id = mp.account_id
+      inner join ref_meterpoints_raw mp on mp.account_id = su.external_id
+--       left outer join (select account_id from ref_registrations_status_gas_audit
+--                         where status in
+--                           ('Tracker.Registration.Gas.Objection.Upheld',
+--                            'Tracker.Registration.Gas.Objection.Received',
+--                            'Tracker.Registration.Gas.Objection.Lifted',
+--                            'Tracker.Registration.Gas.Registration.Rejected',
+--                            'Tracker.Registration.Gas.Abandoned',
+--                            'Tracker.Registration.Gas.Cancelled.in.Cooling.Off')
+--                         group by account_id) rsg on rsg.account_id = mp.account_id
+--       left outer join (select account_id from ref_registrations_status_elec_audit
+--                         where status in
+--                           ('Tracker.Registration.Objection.Upheld',
+--                             'Tracker.Registration.Objection.Received',
+--                            'Tracker.Registration.Objection.Lifted',
+--                            'Tracker.Registration.Registration.Rejected',
+--                            'Tracker.Registration.Withdrawn',
+--                            'Tracker.Registration.Cancelled.In.Cooling.Off')
+--                         group by account_id) rse on rse.account_id = mp.account_id
       left outer join (select account_id from ref_registrations_meterpoints_status_gas_audit
                         where status in
                           ('Tracker.Registration.Gas.Objection.Upheld',
@@ -99,7 +99,7 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Withdrawn',
                            'Tracker.Registration.Cancelled.In.Cooling.Off')
                         group by account_id) rsme on rsme.account_id = mp.account_id
-where mp.supplystartdate between '2019-03-01' and '2019-05-31'
+where mp.supplystartdate between '2019-04-01' and '2019-06-30'
 order by account_id, meterpoint_type
 ) ens
 -- where week_days = 'non-working-days' and day_of_week in(5,6,0)
@@ -155,25 +155,6 @@ order by ensek_id, meterpoint_type
 -- where switch_days_createdat < 21
 ;
 
-
-
-select * from ref_registrations_status_gas_audit rsg
-where status in
-          ('Tracker.Registration.Gas.Objection.Received',
-           'Tracker.Registration.Gas.Objection.Lifted',
-           'Tracker.Registration.Gas.Registration.Rejected',
-           'Tracker.Registration.Gas.Abandoned',
-           'Tracker.Registration.Gas.Cancelled.in.Cooling.Off');
-
-select * from ref_registrations_status_elec_audit rse
-where status in
-          ('Tracker.Registration.Objection.Received',
-           'Tracker.Registration.Objection.Lifted',
-           'Tracker.Registration.Registration.Rejected',
-           'Tracker.Registration.Withdrawn',
-           'Tracker.Registration.Cancelled.In.Cooling.Off');
-
-
 -- gas_status
 -- Tracker.Registration.Gas.Objection.Received
 -- Tracker.Registration.Gas.Objection.Lifted
@@ -201,15 +182,22 @@ where status in
 -- Tracker.Registration.Reads.Obtained
 -- Tracker.Registration.No.Reads
 
+select * from (
 select account_id,
-supplystartdate,
-supplyenddate
+greatest(supplystartdate, associationstartdate) as startdate,
+least(supplyenddate, associationenddate) as enddate
+-- supplystartdate,
+-- supplyenddate,
+-- associationstartdate,
+-- associationenddate
 from ref_meterpoints
-where supplyenddate between '2019-03-01' and '2019-05-31'
-and supplyenddate is not null
-and supplyenddate > supplystartdate
-order by account_id;
+order by account_id) x
+where
+x.enddate between '2019-04-01' and '2019-06-30'
+and x.enddate > x.startdate
+;
 
+select * from ref_meterpoints where supplyenddate is not null;
 
 select user_name, db_name, pid, sv.* query
 from stv_recents sv
