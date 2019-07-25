@@ -132,10 +132,10 @@ from (select mp_elec.account_id,
      on gas_stats.account_id = elec_stats.account_id
          left join ref_consumption_accuracy_gas cons_acc_gas on gas_stats.account_id = cons_acc_gas.account_id
     -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
-         left join ref_cdb_supply_contracts sc on elec_stats.account_id = sc.external_id
+         left join ref_cdb_supply_contracts sc on coalesce(elec_stats.account_id, gas_stats.account_id) = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
-         left join vw_latest_rates lr on elec_stats.account_id = lr.account_id
+         left join vw_latest_rates lr on coalesce(elec_stats.account_id, gas_stats.account_id) = lr.account_id
 
     -- STAGE 2 EXTRACTS FOR DIRECT DEBIT & ACCOUNT BALANCE ---------------------------------------------------------
     -- most recent direct debit payment (for payment day of month)
@@ -149,7 +149,8 @@ from (select mp_elec.account_id,
                              where method = 'Direct Debit'
                                and transactiontype = 'PAYMENT'
                          ) dd_with_rn
-                    where dd_rn = 1) most_recent_dd on most_recent_dd.account_id = elec_stats.account_id
+                    where dd_rn = 1) most_recent_dd
+                   on most_recent_dd.account_id = coalesce(elec_stats.account_id, gas_stats.account_id)
     -- most recent transaction (for account balance)
          left join (select account_id :: int as account_id,
                            currentbalance :: double precision
@@ -159,7 +160,8 @@ from (select mp_elec.account_id,
                                     over (partition by account_id order by creationdetail_createddate desc) as rn
                              from aws_s3_stage2_extracts.stage2_accounttransactions
                          ) dd_with_rn
-                    where rn = 1) most_recent_transaction on most_recent_transaction.account_id = elec_stats.account_id
+                    where rn = 1) most_recent_transaction
+                   on most_recent_transaction.account_id = coalesce(elec_stats.account_id, gas_stats.account_id)
     -- payment layers for upcoming dd amount (with and without winter uplift)
          left join (select acc_end_dates.account_id,
                            sum(case
@@ -181,8 +183,8 @@ from (select mp_elec.account_id,
                                            (pl.effective_to isnull or
                                             (pl.effective_to :: timestamp) >= acc_end_dates.end_date)
                     group by acc_end_dates.account_id) dd_pay_layers
-                   on dd_pay_layers.account_id = elec_stats.account_id
-where elec_stats.account_id not in --exclude known erroneous accounts
+                   on dd_pay_layers.account_id = coalesce(elec_stats.account_id, gas_stats.account_id)
+where coalesce(elec_stats.account_id, gas_stats.account_id) not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606, 38607, 38741, 38742,
        41025, 46605, 46606)
 order by account_id asc
