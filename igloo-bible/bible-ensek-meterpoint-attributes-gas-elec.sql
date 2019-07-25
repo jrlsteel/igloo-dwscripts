@@ -1,4 +1,4 @@
-drop table ref_calculated_account_meterpoints;
+-- drop table ref_calculated_account_meterpoints;
 create table ref_calculated_account_meterpoints
 as
 (
