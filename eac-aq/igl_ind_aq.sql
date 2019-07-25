@@ -1,5 +1,3 @@
--- Tables which need to be updated BEFORE this runs: ref_readings_internal_X where X in (valid, nosi, nrl)
-insert into ref_calculated_Igl_ind_aq
 select account_id,
        LDZ                                                             as gas_ldz,
        gas_imperial_meter_indicator,
@@ -87,13 +85,13 @@ from (
                                        row_number()
                                        over (partition by rriv.account_id, rriv.register_id order by rriv.meterreadingdatetime desc) as r
                                 from ref_readings_internal_valid rriv
-                                    left join ref_calculated_Igl_ind_aq rcaq
-                                        on rriv.account_id = rcaq.account_id and
-                                           rriv.register_id = rcaq.register_id
-                                where rriv.meterpointtype = 'G' and
-                                      (rriv.meterreadingdatetime > rcaq.read_max_datetime_gas or
+                                         left join ref_calculated_Igl_ind_aq rcaq
+                                                   on rriv.account_id = rcaq.account_id and
+                                                      rriv.register_id = rcaq.register_id
+                                where rriv.meterpointtype = 'G'
+                                  and (rriv.meterreadingdatetime > rcaq.read_max_datetime_gas or
                                        rcaq.read_max_datetime_gas isnull)
-                              ) ranked
+                               ) ranked
                           where r = 1) read_close
                              inner join vw_readings_AQ_all read_open
                                         on read_open.register_id = read_close.register_id
@@ -125,4 +123,6 @@ from (
                            on rm.account_id = read_pairs.account_id and
                               rm.meter_point_id = reg_gas.meter_point_id and
                               rm.meter_id = reg_gas.meter_id
-     ) calc_params;
+     ) calc_params
+
+order by igl_ind_aq desc
