@@ -58,7 +58,10 @@ select all_ids.account_id                                                       
            end                                                                          as account_loss_type,
 
        elec_stats.GSP                                                                   as GSP,
-       gas_stats.LDZ                                                                    as LDZ
+       gas_stats.LDZ                                                                    as LDZ,
+       case when wl1.HMI then null else sc.created_at end                               as WL0_date,
+       case when wl1.HMI then null else wl1.asd end                                     as WL1_date,
+       wl1.HMI                                                                          as home_move_in
 
 
 from (select distinct account_id from ref_meterpoints_raw order by account_id) all_ids
@@ -117,7 +120,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join ref_consumption_accuracy_elec cons_acc_elec on elec_stats.account_id = cons_acc_elec.account_id
          left join (select account_id, count(distinct meterpointnumber) num_mps
                     from ref_meterpoints_raw
-                    where meterpointtype = 'E' and usage_flag = 'cancelled'
+                    where meterpointtype = 'E'
+                      and usage_flag = 'cancelled'
                     group by account_id) cancelled_elec
                    on all_ids.account_id = cancelled_elec.account_id
     -- ELEC ------------------------------------------------------------------------------------------------ ELEC
@@ -177,7 +181,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join ref_consumption_accuracy_gas cons_acc_gas on gas_stats.account_id = cons_acc_gas.account_id
          left join (select account_id, count(distinct meterpointnumber) num_mps
                     from ref_meterpoints_raw
-                    where meterpointtype = 'G' and usage_flag = 'cancelled'
+                    where meterpointtype = 'G'
+                      and usage_flag = 'cancelled'
                     group by account_id) cancelled_gas
                    on all_ids.account_id = cancelled_gas.account_id
     -- GAS ---------------------------------------------------------------------------------------------- GAS
@@ -187,6 +192,11 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
          left join vw_latest_rates lr on all_ids.account_id = lr.account_id
+         left join (select account_id,
+                           min(associationstartdate)                                                   as asd,
+                           sum(case when associationstartdate > supplystartdate then 1 else 0 end) > 0 as HMI
+                    from ref_meterpoints_raw
+                    group by account_id) wl1 on all_ids.account_id = wl1.account_id
 
     -- STAGE 2 EXTRACTS FOR DIRECT DEBIT & ACCOUNT BALANCE ---------------------------------------------------------
     -- most recent direct debit payment (for payment day of month)
