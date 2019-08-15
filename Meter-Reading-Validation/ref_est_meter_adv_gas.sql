@@ -1,4 +1,4 @@
--- insert into ref_estimated_advance_gas
+--insert into ref_estimated_advance_gas
 select x1.account_id,
        x1.register_id,
        x1.last_reading_date,
