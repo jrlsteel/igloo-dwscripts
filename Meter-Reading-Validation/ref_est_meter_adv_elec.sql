@@ -1,4 +1,5 @@
---insert into ref_estimated_advance_elec
+truncate table ref_estimated_advance_elec
+insert into ref_estimated_advance_elec
 select x1.account_id,
        x1.register_id,
        x1.last_reading_date,

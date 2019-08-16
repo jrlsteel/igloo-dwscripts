@@ -36,3 +36,4 @@ from (select account_id,
              'G' as type,
              etlchange
       from ref_estimated_advance_gas) ref_estimated_advances
+where account_id = 1831 and register_id in (14649)
