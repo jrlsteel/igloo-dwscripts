@@ -1,4 +1,4 @@
-select cons_acc_elec_old.*, cons_acc_elec_new.*, est_lu.last_updated
+select cons_acc_elec_old.*, cons_acc_elec_new.*
 from (
          select acc_aggs.account_id                      as account_id,
                 latest_readings.max_read_datetime        as reading_datetime,
@@ -13,10 +13,10 @@ from (
          from (select account_id,
                       registration_id,
                       case
-                          when count(nullif(reg_level.pa_cons_elec,0)) < count(*) then 0
+                          when count(reg_level.pa_cons_elec) < count(*) then 0
                           else sum(reg_level.pa_cons_elec) end as pa_cons_elec,
                       case
-                          when count(nullif(reg_level.igl_ind_eac,0)) < count(*) then 0
+                          when count(reg_level.igl_ind_eac) < count(*) then 0
                           else sum(reg_level.igl_ind_eac) end  as igl_ind_eac,
                       sum(reg_level.ind_eac)                   as ind_eac
                from (select su.external_id           as account_id,
@@ -64,10 +64,7 @@ from (
      ) cons_acc_elec_new
          full outer join ref_consumption_accuracy_elec cons_acc_elec_old on
     cons_acc_elec_new.account_id = cons_acc_elec_old.account_id
-         left join (select max(etlchange) as last_updated, account_id
-                    from ref_estimates_elec_internal_audit
-                    group by account_id) est_lu on est_lu.account_id = cons_acc_elec_old.account_id
-order by cons_acc_elec_old.account_id
+order by account_id
 ;
 /*case
         when count(reg_level.igl_ind_eac) < count(reg_level.register_id) then 0

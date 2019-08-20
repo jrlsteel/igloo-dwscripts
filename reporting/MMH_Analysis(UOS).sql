@@ -10,12 +10,32 @@ select * from temp_account_id;
 --      temp_account_id e
 -- left outer join
 -- (
+select x.thermostat,
+       x.hotwatertank,
+       x.ageofboiler,
+       x.typeofheating,
+       x.numberofbedrooms,
+       x.typicallyheated,
+       x.typeofheatingcontrol,
+       x.typeofhouse,
+       x.ageofhouse,
+       x.kitchen_applicances,
+       x.agesofpeople,
+       x.appliancesusage,
+       x.postcode,
+       x.eac,
+       x.aq,
+       case when x.eac is null or x.eac = 0 then 0 else
+           (x.eac * (the_ur.rate/100)) + (3.65 * the_sc.rate) end as elec_annual_spend,
+       case when x.aq is null or x.aq = 0 then 0 else
+           (x.aq * (thg_ur.rate/100)) + (3.65 * thg_sc.rate) end as gas_annual_spend
+from (
 select
        sr.user_id,
-       max(u.email),
+       max(u.email) as email,
        max(concat(lower(u.first_name),concat(' ', lower(u.last_name)))) as name,
        max(left(addr.postcode, len(addr.postcode) - 3)) postcode,
---       su.external_id,
+       su.external_id as account_id,
        max(ac.status),
        max(coalesce((select sum(reg.registers_eacaq)
                              from ref_meterpoints mp
@@ -68,12 +88,6 @@ select
              when att.attribute_description = 'Age of house' then attribute_value
                end) as ageofhouse,
        max(case
-             when att.attribute_description = 'Number of bedrooms in a property' then attribute_value
-               end) as numberofbedrooms,
-       max(case
-             when att.attribute_description = 'Age of the boiler within a property' then attribute_value
-               end) as ageofboiler,
-       max(case
              when att.attribute_name = 'kitchen_appliances' then attribute_custom_value
                end) as kitchen_applicances,
        max(case
@@ -82,6 +96,7 @@ select
        max(case
              when att.attribute_description = 'What appliances are within a certain property' then attribute_custom_value
                end) as appliancesusage
+
 from ref_cdb_supply_contracts su
        inner join ref_cdb_addresses addr on su.supply_address_id = addr.id
        inner join ref_cdb_user_permissions up on su.id = up.permissionable_id and permission_level = 0
@@ -104,10 +119,26 @@ from ref_cdb_supply_contracts su
                         from ref_cdb_survey_response
                         where survey_id = 1
                         group by user_id, survey_id, status) sr on sr.user_id = up.user_id
-where sr.status = 'completed'
-group by sr.user_id
-order by sr.user_id
+where
+sr.status = 'completed'
+group by sr.user_id,
+         su.external_id
+order by sr.user_id) x
+left outer join ref_tariff_history_elec_ur the_ur on the_ur.account_id = x.account_id and the_ur.end_date is null
+left outer join ref_tariff_history_gas_ur thg_ur on thg_ur.account_id = x.account_id and thg_ur.end_date is null
+left outer join ref_tariff_history_elec_sc the_sc on the_sc.account_id = x.account_id and the_sc.end_date is null
+left outer join ref_tariff_history_gas_sc thg_sc on thg_sc.account_id = x.account_id and thg_sc.end_date is null
 ;
+
+select * from ref_cdb_attribute_types;
+
+select pid, trim(user_name), starttime, substring(query,1,20)
+from stv_recents
+where status='Running';
+
+cancel 23014;
+
+select count(*)
 --     su.supply_address_id = 867 and
 --     u.id = 18094 and
 --     sr.user_id is null and

@@ -1,5 +1,7 @@
+-- drop table ref_calculated_account_meterpoints;
 create table ref_calculated_account_meterpoints
 as
+(
 select su.external_id                                       as account_id,
        rcup.user_id                                         as igloo_user_id,
        rca.postcode                                         as supply_postcode,
@@ -11,24 +13,26 @@ select su.external_id                                       as account_id,
                  then 'dual_fuel'
          else 'single_fuel' end                             as dual,
        case
-         when (mp_elec.supplyenddate is null or mp_elec.supplyenddate >= current_date) then 'Live'
+         when (mp_elec.end_date is null or mp_elec.end_date >= current_date) then 'Live'
          else 'Not Live' end                                as meterpoints_status_elec,
        case
          when (
-           mp_gas.meterpointtype = 'G' and (mp_gas.supplyenddate is null or mp_gas.supplyenddate >= current_date))
+           mp_gas.meterpointtype = 'G' and (mp_gas.end_date is null or mp_gas.end_date >= current_date))
                  then 'Live'
          else 'Not Live' end                                as meterpoints_status_gas,
        rse.status                                           as registration_status_elec,
        rsg.status                                           as registration_status_gas,
-       mp_elec.supplystartdate                              as supply_startdate_elec,
-       mp_elec.supplyenddate                                as supply_enddate_elec,
-       mp_gas.supplystartdate                               as supply_startdate_gas,
-       mp_gas.supplyenddate                                 as supply_enddate_gas,
+       mp_elec.start_date                                   as supply_startdate_elec,
+       mp_elec.end_date                                     as supply_enddate_elec,
+       mp_elec.usage_flag                                   as usage_flag_elec,
+       mp_gas.start_date                                    as supply_startdate_gas,
+       mp_gas.end_date                                      as supply_enddate_gas,
        su.created_at                                        as supply_contract_creation_date,
        mp_elec.meter_point_id                               as meter_point_id_elec,
        mp_elec.meterpointnumber                             as meterpointnumber_elec,
        mp_gas.meter_point_id                                as meter_point_id_gas,
        mp_gas.meterpointnumber                              as meterpointnumber_gas,
+       mp_gas.usage_flag                                    as usage_flag_gas,
        mt_elec.meter_id                                     as meter_id_elec,
        mt_gas.meter_id                                      as meter_id_gas,
        reg_elec.register_id                                 as register_id_elec,
@@ -855,12 +859,12 @@ select su.external_id                                       as account_id,
                           end) > 0 then 1
              else 0 end) over (partition by su.external_id) as has_meterpoint_attribute_gas_is_prepay,
        max(case
-             when (mp_elec.supplystartdate > mp_elec.supplyenddate)
+             when (mp_elec.start_date > mp_elec.end_date)
                      then 1
              else 0 end)
            over (partition by su.external_id)               as has_enddate_before_startdate_elec,
        max(case
-             when (mp_gas.supplystartdate > mp_gas.supplyenddate) then 1
+             when (mp_gas.start_date > mp_gas.end_date) then 1
              else 0 end) over (partition by su.external_id) as has_enddate_before_startdate_gas
 
     --Igloo Customer DB
@@ -869,7 +873,7 @@ from ref_cdb_supply_contracts su --inner join temp_cab_dates_quarter4_2018 we on
          on su.id = rcup.permissionable_id and permission_level = 0 and permissionable_type = 'App\\SupplyContract'
        inner join ref_cdb_users rcu on rcup.user_id = rcu.id
        inner join ref_cdb_addresses rca on su.supply_address_id = rca.id --Ensek Meterpoint Elec
-       left outer join ref_meterpoints mp_elec on mp_elec.account_id = su.external_id and mp_elec.meterpointtype = 'E'
+       left outer join ref_meterpoints_raw mp_elec on mp_elec.account_id = su.external_id and mp_elec.meterpointtype = 'E'
        left outer join ref_meterpoints_attributes mpa_elec
          on mp_elec.account_id = mpa_elec.account_id and mp_elec.meter_point_id = mpa_elec.meter_point_id and
             attributes_effectivetodate is null
@@ -878,14 +882,14 @@ from ref_cdb_supply_contracts su --inner join temp_cab_dates_quarter4_2018 we on
             mt_elec.removeddate is null --left outer join ref_meters_attributes mta_elec on mt_elec.meter_id = mta_elec.meter_id
        left outer join ref_registers reg_elec
          on mt_elec.account_id = reg_elec.account_id and mt_elec.meter_id = reg_elec.meter_id --Ensek Meterpoint Gas
-       left outer join ref_meterpoints mp_gas on mp_gas.account_id = su.external_id and mp_gas.meterpointtype = 'G'
+       left outer join ref_meterpoints_raw mp_gas on mp_gas.account_id = su.external_id and mp_gas.meterpointtype = 'G'
        left outer join ref_meterpoints_attributes mpa_gas
          on mp_gas.account_id = mpa_gas.account_id and mp_gas.meter_point_id = mpa_gas.meter_point_id and
             mpa_gas.attributes_effectivetodate is null
-       left outer join ref_meters mt_gas
+       left outer join ref_meters_raw mt_gas
          on mp_gas.account_id = mt_gas.account_id and mp_gas.meter_point_id = mt_gas.meter_point_id and
             mt_gas.removeddate is null
-       left outer join ref_registers reg_gas on mt_gas.account_id = reg_gas.account_id and
+       left outer join ref_registers_raw reg_gas on mt_gas.account_id = reg_gas.account_id and
                                                 mt_gas.meter_id = reg_gas.meter_id --left outer join ref_registers_attributes rga_elec on reg_elec.register_id = rga_elec.register_id
          --Status
        left outer join ref_account_status ac on ac.account_id = su.external_id
@@ -905,21 +909,23 @@ group by su.external_id,
                    then 'dual_fuel'
            else 'single_fuel' end,
          case
-           when (mp_elec.meterpointtype = 'E' and (mp_elec.supplyenddate is null or
-                                                   (mp_elec.supplyenddate >= current_date and
-                                                    mp_elec.supplyenddate >= mp_elec.supplystartdate))) then 'Live'
+           when (mp_elec.meterpointtype = 'E' and (mp_elec.end_date is null or
+                                                   (mp_elec.end_date >= current_date
+                                                    ))) then 'Live'
            else 'Not Live' end,
          case
-           when (mp_gas.meterpointtype = 'G' and (mp_gas.supplyenddate is null or
-                                                  (mp_gas.supplyenddate >= current_date and
-                                                   mp_gas.supplyenddate >= mp_gas.supplystartdate))) then 'Live'
+           when (mp_gas.meterpointtype = 'G' and (mp_gas.end_date is null or
+                                                  (mp_gas.end_date >= current_date
+                                                   ))) then 'Live'
            else 'Not Live' end,
          rse.status,
          rsg.status,
-         mp_elec.supplystartdate,
-         mp_elec.supplyenddate,
-         mp_gas.supplystartdate,
-         mp_gas.supplyenddate,
+         mp_elec.start_date,
+         mp_elec.end_date,
+         mp_elec.usage_flag,
+         mp_gas.start_date,
+         mp_gas.end_date,
+         mp_gas.usage_flag,
          su.created_at,
          mp_elec.meter_point_id,
          mp_elec.meterpointnumber,
@@ -937,3 +943,4 @@ group by su.external_id,
          reg_gas.registers_tpr
     --MeterPoints Attributes Elec
 order by su.external_id
+);
