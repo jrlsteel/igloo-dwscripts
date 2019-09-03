@@ -75,8 +75,27 @@ select all_ids.account_id                                                as acco
        case when wl1.HMI then null else wl1.asd end                      as WL1_date,
        wl1.HMI                                                           as home_move_in,
        gas_et.ET                                                         as gas_et1,
-       elec_et.ET                                                        as elec_et1
+       elec_et.ET                                                        as elec_et1,
 
+       -- sales channel
+       q.channel                                                         as signup_channel,
+       q.secondary_channel                                               as signup_channel_secondary,
+       bm.map_name                                                       as broker_name,
+       bs.broker_urn,
+       sc.created_at                                                     as signup_date,
+       case q.campaign_id
+           when 1 then 'Broker signups from Quotezone.'
+           when 2 then 'Broker signups from MoneySuperMarket.'
+           when 3 then 'Promoting our Facebook Trustpilot score.'
+           when 4 then 'Broker signups from FirstHelpline.'
+           when 5 then 'Broker signups from Dixons Carphone Warehouse.'
+           when 6 then 'Broker signups from Energylinx.'
+           when 7 then 'Refer a Friend scheme'
+           when 8 then 'Promotion for EV 1200 free miles scheme'
+           when 9 then 'Customers signing up through the TeenTech link will receive a £100 reward.'
+           when 10 then 'Broker signups from MoneyExpert.'
+           else q.campaign_id::varchar(3)
+           end                                                           as campaign
 
 from (select distinct account_id from ref_meterpoints_raw order by account_id) all_ids
          left join
@@ -157,23 +176,23 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join
      -- GAS ---------------------------------------------------------------------------------------------- GAS
          (select mp_gas.account_id,
-                 count(distinct meterpointnumber)                                                 as num_meterpoints,
-                 min(greatest(supplystartdate, associationstartdate))                             as start_date,
+                 count(distinct meterpointnumber)                                as num_meterpoints,
+                 min(greatest(supplystartdate, associationstartdate))            as start_date,
                  nullif(max(coalesce(least(supplyenddate, associationenddate),
-                                     current_date + 1000)), current_date + 1000)                  as end_date,
+                                     current_date + 1000)), current_date + 1000) as end_date,
                  --sum(igloo_aq.igl_ind_aq)                                        as igloo_AQ,
                  --sum(industry_aq.estimation_value)                               as industry_AQ,
                  udf_meterpoint_status(
                          min(greatest(supplystartdate, associationstartdate)),
                          nullif(max(coalesce(least(supplyenddate, associationenddate), current_date + 1000)),
                                 current_date + 1000)
-                     )                                                                            as reg_status,
+                     )                                                           as reg_status,
                  case
                      when coalesce(max(mp_gas.associationenddate), current_date + 1000)
                          >= max(mp_gas.supplyenddate) then 'COS'
-                     else 'COT' end                                                               as losstype,
-                 max(mp_gas.meter_point_id)                                                       as gas_mpid,
-                 min(rma_ldz.attributes_attributevalue)                                           as LDZ
+                     else 'COT' end                                              as losstype,
+                 max(mp_gas.meter_point_id)                                      as gas_mpid,
+                 min(rma_ldz.attributes_attributevalue)                          as LDZ
           from (select *,
                        max(least(supplyenddate, associationenddate))
                        over (partition by account_id, meterpointtype) as mp_end_date
@@ -234,6 +253,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join ref_cdb_supply_contracts sc on all_ids.account_id = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
+         left join ref_cdb_broker_maps bm on bm.campaign_id = q.campaign_id
+         left join ref_cdb_broker_signups bs on bs.registration_id = sc.registration_id
          left join vw_latest_rates lr on all_ids.account_id = lr.account_id
          left join (select account_id,
                            min(associationstartdate)                                                   as asd,
@@ -291,5 +312,5 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
 where all_ids.account_id not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606, 38607, 38741, 38742,
        41025, 46605, 46606)
-  --and (elec_et1 or gas_et1)
+      --and (elec_et1 or gas_et1)
 order by account_id
