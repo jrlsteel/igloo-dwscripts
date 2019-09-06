@@ -1,0 +1,141 @@
+-- UDF redhisft
+create function convert_cubic_to_kwh(value_cubic double precision, cv double precision, imp_indicator character)
+  returns double precision
+  stable
+  language plpythonu
+as $$
+    import logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    u = 1
+    value_kwh = 0.0
+
+    # Check if imperial_meter
+    if imp_indicator == 'Y':
+      u = 2.83
+
+    # Check if cv is 0 then return 0 as it cannot be divided
+    value_kwh = value_cubic * ((1.02264 * cv * u) / 3.6)
+
+    return value_kwh
+
+$$;
+-- UDF redshift
+create function convert_kwh_to_cubic(value_kwh double precision, cv double precision, imp_indicator character)
+  returns double precision
+  stable
+  language plpythonu
+as $$
+    import logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    u = 1
+    value_cubic = 0.0
+
+    # Check if imperial_meter
+    if imp_indicator == 'Y':
+      u = 2.83
+
+    # Check if cv is 0 then return 0 as it cannot be divided
+    if cv != 0:
+      value_cubic = (value_kwh * 3.6) / (1.02264 * cv * u)
+
+    return value_cubic
+
+$$;
+
+
+-- Redshift
+-- drop table ref_estimated_advance_elec;
+create table ref_estimated_advance_elec
+(
+	account_id bigint distkey,
+	register_id bigint,
+	last_reading_date timestamp,
+	last_reading_value double precision,
+	igl_eac double precision,
+	ind_eac double precision,
+	effective_for timestamp,
+	igl_estimated_advance double precision,
+	ind_estimated_advance double precision,
+	igl_lower_threshold double precision,
+	igl_higher_threshold double precision,
+	ind_lower_threshold double precision,
+	ind_higher_threshold double precision,
+	register_num_digits integer,
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, register_id, effective_for);
+
+alter table ref_estimated_advance_elec owner to igloo;
+
+-- drop table ref_estimated_advance_gas;
+create table ref_estimated_advance_gas
+(
+	account_id bigint distkey,
+	register_id bigint,
+	last_reading_date timestamp,
+	last_reading_value double precision,
+	igl_aq double precision,
+	ind_aq double precision,
+	effective_for timestamp,
+	igl_estimated_advance double precision,
+	ind_estimated_advance double precision,
+	igl_lower_threshold double precision,
+	igl_higher_threshold double precision,
+	ind_lower_threshold double precision,
+	ind_inner_threshold double precision,
+	ind_higher_threshold double precision,
+	register_num_digits integer,
+	etlchange timestamp
+)
+diststyle key
+sortkey(account_id, register_id, effective_for);
+
+alter table ref_estimated_advance_gas owner to igloo;
+
+
+
+-- RDS
+create table ref_estimated_advance_elec
+(
+	account_id bigint,
+	register_id bigint,
+	last_reading_date timestamp,
+	last_reading_value double precision,
+	igl_eac double precision,
+	ind_eac double precision,
+	effective_for timestamp,
+	igl_estimated_advance double precision,
+	ind_estimated_advance double precision,
+	igl_lower_threshold double precision,
+	igl_higher_threshold double precision,
+	ind_lower_threshold double precision,
+	ind_higher_threshold double precision,
+	register_num_digits integer,
+	etlchange timestamp
+);
+
+create table ref_estimated_advance_gas
+(
+	account_id bigint,
+	register_id bigint,
+	last_reading_date timestamp,
+	last_reading_value double precision,
+	igl_aq double precision,
+	ind_aq double precision,
+	effective_for timestamp,
+	igl_estimated_advance double precision,
+	ind_estimated_advance double precision,
+	igl_lower_threshold double precision,
+	igl_higher_threshold double precision,
+	ind_lower_threshold double precision,
+	ind_inner_threshold double precision,
+	ind_higher_threshold double precision,
+	register_num_digits integer,
+	etlchange timestamp
+);
+
