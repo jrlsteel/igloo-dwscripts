@@ -1,3 +1,17 @@
+-- DWH TABLE BACKUPS
+create table ref_consumption_accuracy_elec_backup_R019 as select * from ref_consumption_accuracy_elec;
+create table ref_consumption_accuracy_gas_backup_R019 as select * from ref_consumption_accuracy_gas;
+create table ref_consumption_accuracy_elec_audit_backup_R019 as select * from ref_consumption_accuracy_elec_audit;
+create table ref_consumption_accuracy_gas_audit_backup_R019 as select * from ref_consumption_accuracy_gas_audit;
+create table ref_calculated_igl_ind_aq_backup_R019 as select * from ref_calculated_igl_ind_aq;
+create table ref_calculated_aq_backup_R019 as select * from ref_calculated_aq;
+
+-- TRUNCATE TABLES
+truncate table ref_calculated_aq;
+truncate table ref_calculated_igl_ind_aq;
+
+-- NEW VIEWS
+-- 1
 create or replace view vw_consumption_accuracy_elec_closed as
 select account_id,
        reading_datetime,
@@ -11,8 +25,9 @@ from (select *, row_number() over (partition by account_id order by etlchange de
      ) last_update
 where last_update.recency = 1
   and etlchangetype = 'r'
-order by account_id
+order by account_id;
 
+-- 2
 create or replace view vw_consumption_accuracy_gas_closed as
 select account_id,
        reading_datetime,
@@ -26,8 +41,9 @@ from (select *, row_number() over (partition by account_id order by etlchange de
      ) last_update
 where last_update.recency = 1
   and etlchangetype = 'r'
-order by account_id
+order by account_id;
 
+-- 3
 create or replace view vw_supply_contracts_with_occ_accs as
     select id,
            supply_address_id,
@@ -58,4 +74,4 @@ create or replace view vw_supply_contracts_with_occ_accs as
           on mp_address_ids.meterpointnumber = mpr.meterpointnumber
               left join ref_cdb_supply_contracts sc on mpr.account_id = sc.external_id
      where sc.external_id is null
-     group by mpr.account_id)
+     group by mpr.account_id);
