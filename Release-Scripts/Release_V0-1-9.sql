@@ -5,10 +5,12 @@ create table ref_consumption_accuracy_elec_audit_backup_R019 as select * from re
 create table ref_consumption_accuracy_gas_audit_backup_R019 as select * from ref_consumption_accuracy_gas_audit;
 create table ref_calculated_igl_ind_aq_backup_R019 as select * from ref_calculated_igl_ind_aq;
 create table ref_calculated_aq_backup_R019 as select * from ref_calculated_aq;
+create table ref_readings_internal_valid_backup_R019 as select * from ref_readings_internal_valid;
 
 -- TRUNCATE TABLES
 truncate table ref_calculated_aq;
 truncate table ref_calculated_igl_ind_aq;
+truncate table ref_readings_internal_valid;
 
 -- NEW VIEWS
 -- 1

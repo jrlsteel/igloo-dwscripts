@@ -2,11 +2,16 @@
 select rm.account_id,
        greatest(rm.supplystartdate, rm.associationstartdate) as ssd,
        least(rm.supplyenddate, rm.associationenddate)        as sed,
-       meter_point_id,
+       rm.meter_point_id,
+       met.meter_id,
+       reg.register_id,
        meterpointtype,
        sc.source
 from vw_supply_contracts_with_occ_accs sc
          inner join ref_meterpoints rm on rm.account_id = sc.external_id
+         left join ref_meters met on rm.account_id = met.account_id and met.meter_point_id = rm.meter_point_id and
+                                     met.removeddate is null
+         left join ref_registers reg on reg.account_id = met.account_id and reg.meter_id = met.meter_id
          left join ref_consumption_accuracy_elec ca_elec
                    on ca_elec.account_id = rm.account_id and rm.meterpointtype = 'E'
          left join ref_consumption_accuracy_gas ca_gas on ca_gas.account_id = rm.account_id and rm.meterpointtype = 'G'
@@ -17,17 +22,26 @@ where greatest(rm.associationstartdate, rm.supplystartdate) <= getdate()
        (ca_gas.account_id is null and rm.meterpointtype = 'G'));
 
 
--- 2) return accounts where an aq was calculated before but not now
+-- 2.1) return accounts where an aq was calculated before but not now
 select *
-from ref_calculated_igl_ind_aq_backup_V019 aq_backup
+from ref_calculated_igl_ind_aq_backup_R019 aq_backup
          left join ref_calculated_igl_ind_aq aq
                    on aq.account_id = aq_backup.account_id and aq.register_id = aq_backup.register_id
 where aq.account_id is null;
-select *
-from ref_calculated_aq_backup_V019 aq_backup
+-- 2.2)
+select aq_backup.*, mp.meter_point_id, met.meter_id, met.removeddate, reg.register_id
+from ref_calculated_aq_backup_R019 aq_backup
+         inner join ref_meterpoints mp on mp.account_id = aq_backup.account_id and
+                                          (least(mp.supplyenddate, mp.associationenddate) is null or
+                                           least(mp.supplyenddate, mp.associationenddate) >= getdate())
+         inner join ref_meters met on met.account_id = mp.account_id and met.meter_point_id = mp.meter_point_id and
+                                      met.removeddate is null
+         inner join ref_registers reg on reg.account_id = met.account_id and reg.meter_id = met.meter_id and
+                                         reg.register_id = aq_backup.register_id
          left join ref_calculated_aq aq
                    on aq.account_id = aq_backup.account_id and aq.register_id = aq_backup.register_id
-where aq.account_id is null;
+where aq.account_id is null
+order by aq_backup.account_id;
 
 -- 3) number of accounts in cons_acc with differing elec/gas latest_reading_datetimes
 select case
@@ -95,7 +109,7 @@ from (select meterreadingsourceuid, meterpointtype, count(*) as new_count
       group by meterreadingsourceuid, meterpointtype) rriv_new
          full join
      (select meterreadingsourceuid, meterpointtype, count(*) as old_count
-      from ref_readings_internal_valid_backup_V019
+      from ref_readings_internal_valid_backup_R019
       group by meterreadingsourceuid, meterpointtype) rriv_old
      on rriv_new.meterreadingsourceuid = rriv_old.meterreadingsourceuid and
         rriv_new.meterpointtype = rriv_old.meterpointtype;
