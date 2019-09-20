@@ -50,8 +50,12 @@ from (select cf.account_id,
                                         met.removeddate is null
                            left join ref_registers reg
                                      on reg.account_id = met.account_id and reg.meter_id = met.meter_id
-                  where least(associationenddate, supplyenddate) is null
-                     or least(associationenddate, supplyenddate) >= getdate()
+                           left join ref_meterpoints_attributes rma_es on rma_es.account_id = mp.account_id and
+                                                                          rma_es.meter_point_id = mp.meter_point_id and
+                                                                          rma_es.attributes_attributename = 'EnergisationStatus'
+                  where (least(associationenddate, supplyenddate) is null
+                      or least(associationenddate, supplyenddate) >= getdate())
+                    and nvl(rma_es.attributes_attributevalue, 'Null') not in ('D', 'Deenergised')
                   group by mp.account_id, mp.meterpointtype, mp.meter_point_id
                  ) mp_sums
             group by account_id
