@@ -312,5 +312,6 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
 where all_ids.account_id not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606, 38607, 38741, 38742,
        41025, 46605, 46606)
-      --and (elec_et1 or gas_et1)
+  and sc.registration_id != 54995
+  and bs.id != 846
 order by account_id
