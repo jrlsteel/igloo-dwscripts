@@ -290,7 +290,7 @@ from (select distinct account_id
     -- GAS ---------------------------------------------------------------------------------------------- GAS
 
     -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
-         left join (select * from ref_cdb_supply_contracts where registration_id != 54995) sc
+         left join (select * from ref_cdb_supply_contracts where id != 54995) sc
                    on all_ids.account_id = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
@@ -359,4 +359,3 @@ where all_ids.account_id not in --exclude known erroneous accounts
        38607, 38741, 38742,
        41025, 46605, 46606)
 order by account_id
-;
