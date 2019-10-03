@@ -1,50 +1,172 @@
-select mp.meterpointnumber                                         as MPR,
-       met.meterserialnumber                                       as MSN,
-       met.account_id                                              as Account_ID,
-       mp.meterpointtype                                           as fuel_type,
-       mp.supplystartdate                                          as meterpoint_SSD,
-       mp.supplyenddate                                            as meterpoint_SED,
-       udf_meterpoint_status(mp.supplystartdate, mp.supplyenddate) as meterpoint_status,
-       greatest(mp.supplystartdate, mp.associationstartdate)       as acc_mp_SSD,
-       least(mp.supplyenddate, mp.associationenddate)              as acc_mp_SED,
-       udf_meterpoint_status(acc_mp_SSD, acc_mp_SED)               as acc_mp_status,
-       rma_status.metersattributes_attributevalue                  as meter_status,
-       met.installeddate                                           as meter_install_date,
-       met.removeddate                                             as meter_removed_date,
-       rma_type.metersattributes_attributevalue                    as meter_type,
-       rma_location.metersattributes_attributevalue                as meter_location,
-       rma_mech.metersattributes_attributevalue                    as meter_mechanism,
-       num_reg.reg_count                                           as num_registers,
-       rma_digits.attributes_attributevalue                        as num_dials,
-       rma_ssc.attributes_attributevalue                           as SSC,
-       rma_mopmam.attributes_attributevalue                        as MOP_MAM,
-       rma_mopmam.attributes_effectivefromdate                     as MOP_MAM_effective_date,
+with read_types as
+         (select account_id,
+                 meter_id,
+                 min(ssd_date) as ssd_date,
+                 case min(ssd_cat)
+                     when 0 then 'No'
+                     when 1 then 'Invalid'
+                     when 2 then 'Valid'
+                     end       as ssd_cat,
+                 min(sed_date) as sed_date,
+                 case min(sed_cat)
+                     when 0 then 'No'
+                     when 1 then 'Invalid_Negative'
+                     when 2 then 'Invalid_Positive'
+                     when 3 then 'Valid_Negative'
+                     when 4 then 'Valid_Positive'
+                     end       as sed_cat,
+                 min(i_date)   as i_date,
+                 case min(i_cat)
+                     when 0 then 'No'
+                     when 1 then 'Invalid'
+                     when 2 then 'Valid'
+                     end       as i_cat,
+                 min(f_date)   as f_date,
+                 case min(f_cat)
+                     when 0 then 'No'
+                     when 1 then 'Invalid_Negative'
+                     when 2 then 'Invalid_Positive'
+                     when 3 then 'Valid_Negative'
+                     when 4 then 'Valid_Positive'
+                     end       as f_cat
+          from (select reg.account_id,
+                       reg.meter_id,
+                       reg.register_id,
+                       max(rri_open.meterreadingdatetime)    as ssd_date,
+                       max(case
+                               when rri_open.meterreadingstatusuid is null then 0
+                               when rri_open.meterreadingstatusuid != 'VALID' then 1
+                               else 2
+                           end)                              as ssd_cat,
+                       max(rri_initial.meterreadingdatetime) as i_date,
+                       max(case
+                               when rri_initial.meterreadingstatusuid is null then 0
+                               when rri_initial.meterreadingstatusuid != 'VALID' then 1
+                               else 2
+                           end)                              as i_cat,
+                       max(rri_close.meterreadingdatetime)   as sed_date,
+                       max(case
+                               when rri_close.hasregisteradvance is null or
+                                    rri_close.meterreadingstatusuid is null then 0
+                               when rri_close.meterreadingstatusuid != 'VALID' and
+                                    not rri_close.hasregisteradvance then 1
+                               when rri_close.meterreadingstatusuid != 'VALID' and
+                                    rri_close.hasregisteradvance then 2
+                               when rri_close.meterreadingstatusuid = 'VALID' and
+                                    not rri_close.hasregisteradvance then 3
+                               else 4
+                           end)                              as sed_cat,
+                       max(rri_final.meterreadingdatetime)   as f_date,
+                       max(case
+                               when rri_final.hasregisteradvance is null or
+                                    rri_final.meterreadingstatusuid is null then 0
+                               when rri_final.meterreadingstatusuid != 'VALID' and
+                                    not rri_final.hasregisteradvance then 1
+                               when rri_final.meterreadingstatusuid != 'VALID' and
+                                    rri_final.hasregisteradvance then 2
+                               when rri_final.meterreadingstatusuid = 'VALID' and
+                                    not rri_final.hasregisteradvance then 3
+                               else 4
+                           end)                              as f_cat
+                from ref_meters met
+                         inner join ref_meterpoints_raw rmp
+                                    on met.account_id = rmp.account_id and
+                                       met.meter_point_id = rmp.meter_point_id
+                         inner join ref_registers reg
+                                    on reg.account_id = met.account_id and reg.meter_id = met.meter_id
+                         left join ref_readings_internal rri_open
+                                   on rri_open.account_id = reg.account_id and
+                                      rri_open.register_id = reg.register_id and
+                                      rri_open.meterreadingdatetime =
+                                      greatest(rmp.supplystartdate, rmp.associationstartdate) and
+                                      rri_open.meterreadingsourceuid in ('DC', 'DCOPENING')
+                         left join ref_readings_internal rri_close
+                                   on rri_close.account_id = reg.account_id and
+                                      rri_close.register_id = reg.register_id and
+                                      datediff(days,
+                                               least(rmp.supplyenddate, rmp.associationenddate),
+                                               rri_close.meterreadingdatetime) = 1 and
+                                      rri_close.meterreadingsourceuid = 'DC'
+                         left join ref_readings_internal rri_initial
+                                   on rri_initial.account_id = reg.account_id and
+                                      rri_initial.register_id = reg.register_id and
+                                      rri_initial.meterreadingdatetime = met.installeddate and
+                                      rri_initial.meterreadingsourceuid = 'DC'
+                         left join ref_readings_internal rri_final
+                                   on rri_final.account_id = reg.account_id and
+                                      rri_final.register_id = reg.register_id and
+                                      rri_final.meterreadingdatetime = met.removeddate and
+                                      rri_final.meterreadingsourceuid = 'DC'
+                group by reg.account_id, reg.meter_id, reg.register_id) reg_level
+          group by reg_level.account_id, reg_level.meter_id
+          order by account_id, meter_id)
+
+select mp.meterpointnumber                                                    as MPR,
+       met.meterserialnumber                                                  as MSN,
+       met.account_id                                                         as Account_ID,
+       mp.meterpointtype                                                      as fuel_type,
+       mp.supplystartdate                                                     as meterpoint_SSD,
+       mp.supplyenddate                                                       as meterpoint_SED,
+       udf_meterpoint_status(mp.supplystartdate, mp.supplyenddate)            as meterpoint_status,
+       greatest(mp.supplystartdate, mp.associationstartdate)                  as acc_mp_SSD,
+       least(mp.supplyenddate, mp.associationenddate)                         as acc_mp_SED,
+       udf_meterpoint_status(acc_mp_SSD, acc_mp_SED)                          as acc_mp_status,
+       rma_status.metersattributes_attributevalue                             as meter_status, -- only present in around half of cases
+       met.installeddate                                                      as meter_install_date,
+       met.removeddate                                                        as meter_removed_date,
+       rma_type.metersattributes_attributevalue                               as meter_type,
+       rma_location.metersattributes_attributevalue                           as meter_location,
+       rma_mech.metersattributes_attributevalue                               as meter_mechanism,
+       num_reg.reg_count                                                      as num_registers,
+       rma_digits.attributes_attributevalue                                   as num_dials,
+       rma_ssc.attributes_attributevalue                                      as SSC,
+       rma_mopmam.attributes_attributevalue                                   as MOP_MAM,
+       rma_mopmam.attributes_effectivefromdate                                as MOP_MAM_effective_date,
 --        null                                                                  as MAM,
 --        null                                                                  as MAM_effective_date,
-       old_mopmams.old_mopmams                                     as old_MOP_MAM,
+       old_mopmams.old_mopmams                                                as old_MOP_MAM,
 --        null                                                                  as old_MAM,
-       rma_osmopmam.attributes_attributevalue                      as old_supplier_MOP_MAM,
+       rma_osmopmam.attributes_attributevalue                                 as old_supplier_MOP_MAM,
 --        null                                                                  as old_supplier_MAM,
---        case
---            when count(met_repl) > 0 then 'Yes'
---            when met.removeddate is not null and met.removeddate < getdate() then 'Removed'
---            else 'No'
---            end                                                     as MEX_occurred,
---        met_repl.installeddate                                      as MEX_date,
-       null                                                        as F_read,
-       null                                                        as F_read_date,
-       null                                                        as I_read,
-       null                                                        as I_read_date,
-       null                                                        as SSD_DC_read_in,
-       null                                                        as SSD_DC_read_date,
-       null                                                        as EAC_in,
-       null                                                        as EAC_effective_date,
-       null                                                        as AQ_in,
-       null                                                        as AQ_effective_date,
-       null                                                        as Final_DC_Read_in,
-       null                                                        as Final_DC_read_date
+       case
+           when met_repl.meter_id is not null then 'Yes'
+           when met.removeddate is not null and met.removeddate < getdate() then 'Removed'
+           else 'No'
+           end                                                                as MEX_occurred,
+       met_repl.installeddate                                                 as MEX_date,
+       case
+           when met.removeddate is null or met.removeddate > getdate() then 'N/A'
+           else read_info.f_cat
+           end                                                                as F_read,
+       case when F_read = 'N/A' then null else read_info.f_date end           as F_read_date,
+       case
+           when met.installeddate < acc_mp_SSD then 'N/A'
+           else read_info.i_cat
+           end                                                                as I_read,
+       case when I_read = 'N/A' then null else read_info.i_date end           as I_read_date,
+       case
+           when acc_mp_SSD > getdate() then 'N/A'
+           else read_info.ssd_cat
+           end                                                                as SSD_DC_read_in,
+       case when SSD_DC_read_in = 'N/A' then null else read_info.ssd_date end as SSD_DC_read_date,
+       case
+           when acc_mp_SED is null or acc_mp_SED > getdate() then 'N/A'
+           else read_info.sed_cat
+           end                                                                as SED_DC_Read_in,
+       case when SED_DC_Read_in = 'N/A' then null else read_info.sed_date end as SED_DC_read_date,
+       case
+           when estimates.num_reg is null then 'No'
+           when estimates.num_reg < num_registers then 'Partial'
+           else 'Yes'
+           end                                                                as EAC_AQ_in,
+       estimates.effective_from                                               as EAC_AQ_effective_date
+--        null                                                        as AQ_in,
+--        null                                                        as AQ_effective_date,
+
 
 from ref_meters met
+         left join read_types read_info on met.account_id = read_info.account_id and
+                                           met.meter_id = read_info.meter_id
          left join ref_meterpoints mp on met.meter_point_id = mp.meter_point_id and met.account_id = mp.account_id
          left join ref_meters_attributes rma_status on rma_status.metersattributes_attributename = 'Meter_Status' and
                                                        rma_status.meter_id = met.meter_id and
@@ -85,157 +207,18 @@ from ref_meters met
          left join ref_meterpoints_attributes rma_osmopmam
                    on rma_osmopmam.attributes_attributename in ('OLD_SUPPLIER_MOP', 'OLD_SUPPLIER_MAM') and
                       rma_osmopmam.account_id = met.account_id and rma_osmopmam.meter_point_id = met.meter_point_id
-         /*left join ref_meters met_repl
+         left join ref_meters met_repl --todo - join ref meters to readings internal here (inner select) to get I_read
                    on met_repl.account_id = met.account_id and met_repl.meter_point_id = met.meter_point_id and
                       datediff(days, met.removeddate, met_repl.installeddate) between 0 and 5
-*/
+         left join (select account_id, mpan, serial_number, count(*) as num_reg, min(effective_from) as effective_from
+                    from (select account_id, mpan, serial_number, register_id, max(effective_from) as effective_from
+                          from (select *
+                                from ref_estimates_elec_internal
+                                union
+                                select *
+                                from ref_estimates_gas_internal) ests
+                          group by account_id, mpan, serial_number, register_id) most_recent_estimate
+                    group by account_id, mpan, serial_number) estimates
+                   on met.account_id = estimates.account_id and met.meterserialnumber = estimates.serial_number
 
 order by mpr, msn, Account_ID
-
-select distinct attributes_attributename
-from ref_meterpoints_attributes
-select *
-from ref_meters_attributes
-/*
- metersattributes_attributename
-MeterType
-Gas_Meter_Mechanism
-Manufacture_Code
-Meter_Mechanism_Code
-Year_Of_Manufacture
-Meter_Location
-Manufacturers_Make_Type
-Bypass_Fitted_Indicator
-Collar_Fitted_Indicator
-Conversion_Factor
-Amr_Indicator
-Gas_Act_Owner
-Meter_Link_Code
-Meter_Status
-Model_Code
-Payment_Method_Code
-Meter_Location_Description
-METER_LOCATION
-Imperial_Indicator
-Inspection_Date
-Meter_Manufacturer_Code
-Measuring_Capacity
-Meter_Reading_Factor
-Pulse_Value
-
- */
-
-
-/* meterpoints attributes attributes_attributename
-BILLING STATUS
-CLIENT_UNIQUE_REFERENCE
-Confirmation_Reference
-Current_Mam_Abbreviated_Name
-DA
-DC
-DisconnectionDate
-Disconnection_Status
-Distributor
-ET
-EnergisationStatus
-GAIN_SUPPLIER
-GSP
-Gas_Act_Owner
-Gas_Imperial_Meter_Indicator
-Gas_Loss_Confirmation_Reference
-Gas_Meter_Location_Code
-Gas_Meter_Manufactured_Year
-Gas_Meter_Manufacturer_Code
-Gas_Meter_Mechanism
-Gas_Meter_Model
-Gas_Meter_Serial_Number
-Gas_Meter_Status
-Gas_No_Of_Digits
-Green Deal
-IGT Indicator
-IsPrepay
-LDZ
-LLF Indicator
-LLFC
-LOSS_REGISTRATION_TRANSACTION_NUMBER
-Large Site Indicator
-Location_Code
-Loss Objection
-MAM
-MOP
-MTC
-MTC Related
-Measurement Class
-Meter Designation
-Meter Status
-MeterMakeAndModel
-MeterType
-Meter_Point_Status
-Meter_Round_The_Clock_Count
-Metering Type
-NEW_DA
-NEW_DC
-NEW_MAM
-NEW_MOP
-NOMINATION_SHIPPER_REF
-No_Of_Digits
-OLD_DA
-OLD_DC
-OLD_MAM
-OLD_MOP
-OLD_SUPPLIER
-OLD_SUPPLIER_DA
-OLD_SUPPLIER_DC
-OLD_SUPPLIER_MAM
-OLD_SUPPLIER_MOP
-Objection Status
-Profile Class
-ReadCycle
-Registration_Transaction_Number
-SSC
-SUPPLIER
-SUPPLY_POINT_CATEGORY
-Supply_Status
-Threshold.DailyConsumption
-Transporter
-greenDealActive
-igtIndicator
-isCOT
-isPrepay
-
-*/
-
-select meterpointnumber
-from ref_meterpoints
-group by meterpointnumber
-having count(distinct supplyenddate) > 1
-
-select *
-from ref_meterpoints
-where meterpointnumber = 1200061643950
-select *
-from ref_meters
-
-select distinct metersattributes_attributevalue
-from ref_meters_attributes
-where metersattributes_attributename = 'MeterType'
-
-select account_id, meter_point_id
-from ref_meterpoints_attributes
-where attributes_attributename = 'MOP'
-group by account_id, meter_point_id
-having count(*) > 2
-
-select *
-from ref_meterpoints_attributes
-where meter_point_id = 26884
-  and attributes_attributename = 'MOP'
-
-select meter_id
-from ref_meters
-group by meter_id
-having count(removeddate) > 0-- and count(removeddate) < count(*)
-
-select *
-from ref_meters
-where account_id = 1831
