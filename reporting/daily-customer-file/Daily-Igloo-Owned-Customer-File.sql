@@ -47,15 +47,20 @@ select all_ids.account_id                                                as acco
            when num_elec_MPNs > 0 and num_gas_MPNs = 0 then 'Elec'
            when num_elec_MPNs = 0 and num_gas_MPNs > 0 then 'Gas'
            else case
-                    when num_canc_elec_MPNs > 0 and num_canc_gas_MPNs > 0 then 'Dual'
-                    when num_canc_elec_MPNs > 0 and num_canc_gas_MPNs = 0 then 'Elec'
-                    when num_canc_elec_MPNs = 0 and num_canc_gas_MPNs > 0 then 'Gas'
+                    when num_canc_elec_MPNs > 0 and num_canc_gas_MPNs > 0
+                        then 'Dual'
+                    when num_canc_elec_MPNs > 0 and num_canc_gas_MPNs = 0
+                        then 'Elec'
+                    when num_canc_elec_MPNs = 0 and num_canc_gas_MPNs > 0
+                        then 'Gas'
                     else 'ERROR'
                end
            end                                                           as supply_type,
        case
-           when (num_elec_MPNs + num_gas_MPNs) = 0 and (num_canc_elec_MPNs + num_canc_gas_MPNs) > 0 then 'Cancelled'
-           when (num_elec_MPNs + num_gas_MPNs + num_canc_elec_MPNs + num_canc_gas_MPNs) = 0 then 'ERROR'
+           when (num_elec_MPNs + num_gas_MPNs) = 0 and
+                (num_canc_elec_MPNs + num_canc_gas_MPNs) > 0 then 'Cancelled'
+           when (num_elec_MPNs + num_gas_MPNs + num_canc_elec_MPNs + num_canc_gas_MPNs) = 0
+               then 'ERROR'
            else udf_meterpoint_status(
                    least(Gas_SSD, Elec_SSD),
                    case supply_type
@@ -66,7 +71,9 @@ select all_ids.account_id                                                as acco
                ) end                                                     as account_status,
        case
            when account_status = 'Final' then
-               case when greatest(Elec_ED, Gas_ED) = Elec_ED then elec_loss_type else gas_loss_type end
+               case
+                   when greatest(Elec_ED, Gas_ED) = Elec_ED then elec_loss_type
+                   else gas_loss_type end
            end                                                           as account_loss_type,
 
        elec_stats.GSP                                                    as GSP,
@@ -92,78 +99,97 @@ select all_ids.account_id                                                as acco
            when 6 then 'Broker signups from Energylinx.'
            when 7 then 'Refer a Friend scheme'
            when 8 then 'Promotion for EV 1200 free miles scheme'
-           when 9 then 'Customers signing up through the TeenTech link will receive a £100 reward.'
+           when 9
+               then 'Customers signing up through the TeenTech link will receive a £100 reward.'
            when 10 then 'Broker signups from MoneyExpert.'
            else q.campaign_id::varchar(3)
            end                                                           as campaign
 
-from (select distinct account_id from ref_meterpoints_raw order by account_id) all_ids
+from (select distinct account_id
+      from ref_meterpoints_raw
+      order by account_id) all_ids
          left join
      -- ELEC ------------------------------------------------------------------------------------------------ ELEC
          (select mp_elec.account_id,
-                 count(distinct meterpointnumber)                                as num_meterpoints,
-                 min(greatest(supplystartdate, associationstartdate))            as start_date,
+                 count(distinct meterpointnumber)                     as num_meterpoints,
+                 min(greatest(supplystartdate, associationstartdate)) as start_date,
                  nullif(max(coalesce(least(supplyenddate, associationenddate),
-                                     current_date + 1000)), current_date + 1000) as end_date,
+                                     current_date + 1000)),
+                        current_date + 1000)                          as end_date,
                  --sum(igloo_eac.igl_ind_eac)                                      as igloo_EAC,
                  --sum(industry_eac.estimation_value)                              as industry_EAC,
                  udf_meterpoint_status(
                          min(greatest(supplystartdate, associationstartdate)),
-                         nullif(max(coalesce(least(supplyenddate, associationenddate), current_date + 1000)),
+                         nullif(max(coalesce(
+                                 least(supplyenddate, associationenddate),
+                                 current_date + 1000)),
                                 current_date + 1000)
-                     )                                                           as reg_status,
+                     )                                                as reg_status,
                  case
                      when coalesce(max(mp_elec.associationenddate), current_date + 1000)
                          >= max(mp_elec.supplyenddate) then 'COS'
-                     else 'COT' end                                              as losstype,
-                 min(rma_gsp.attributes_attributevalue)                          as GSP
+                     else 'COT' end                                   as losstype,
+                 min(rma_gsp.attributes_attributevalue)               as GSP
           from (select *,
                        max(least(supplyenddate, associationenddate))
                        over (partition by account_id, meterpointtype) as mp_end_date
                 from ref_meterpoints
                 where meterpointtype = 'E') mp_elec
                    left join
-               (select sum(igl_ind_eac) over (partition by account_id, meterpoint_id, trunc(etlchange))   as igl_ind_eac,
+               (select sum(igl_ind_eac)
+                       over (partition by account_id, meterpoint_id, trunc(etlchange))       as igl_ind_eac,
                        account_id,
                        meterpoint_id,
-                       row_number() over (partition by account_id, meterpoint_id order by etlchange desc) as rn
+                       row_number()
+                       over (partition by account_id, meterpoint_id order by etlchange desc) as rn
                 from ref_calculated_igl_ind_eac
                 where meter_removed_date isnull) igloo_eac
-               on igloo_eac.account_id = mp_elec.account_id and igloo_eac.meterpoint_id = mp_elec.meter_point_id and
+               on igloo_eac.account_id = mp_elec.account_id and
+                  igloo_eac.meterpoint_id = mp_elec.meter_point_id and
                   igloo_eac.rn = 1
                    left join
                (select
                     -- Sum of estimation values for a given account, mpn and day taken to cover all registers under that mpn
-                    sum(estimation_value) over (partition by account_id, mpan, effective_from)     as estimation_value,
+                    sum(estimation_value)
+                    over (partition by account_id, mpan, effective_from)              as estimation_value,
                     account_id,
                     mpan,
-                    row_number() over (partition by account_id, mpan order by effective_from desc) as rn
+                    row_number()
+                    over (partition by account_id, mpan order by effective_from desc) as rn
                 from ref_estimates_elec_internal
                 where islive = true) industry_eac
-               on industry_eac.account_id = mp_elec.account_id and industry_eac.mpan = mp_elec.meterpointnumber and
+               on industry_eac.account_id = mp_elec.account_id and
+                  industry_eac.mpan = mp_elec.meterpointnumber and
                   industry_eac.rn = 1
                    left join ref_meterpoints_attributes rma_gsp
                              on rma_gsp.meter_point_id = mp_elec.meter_point_id and
                                 rma_gsp.account_id = mp_elec.account_id and
                                 rma_gsp.attributes_attributename = 'GSP'
-          where coalesce(datediff(days, least(supplyenddate, associationenddate), mp_end_date), 0) <= 31
-            and (greatest(supplystartdate, associationstartdate) <= least(supplyenddate, associationenddate)
-              or (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
+          where coalesce(
+                        datediff(days, least(supplyenddate, associationenddate),
+                                 mp_end_date), 0) <= 31
+            and (greatest(supplystartdate, associationstartdate) <=
+                 least(supplyenddate, associationenddate)
+              or
+                 (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
           group by mp_elec.account_id) elec_stats
      on all_ids.account_id = elec_stats.account_id
-         left join ref_consumption_accuracy_elec cons_acc_elec on elec_stats.account_id = cons_acc_elec.account_id
+         left join ref_consumption_accuracy_elec cons_acc_elec
+                   on elec_stats.account_id = cons_acc_elec.account_id
          left join (select account_id, count(distinct meterpointnumber) num_mps
                     from ref_meterpoints_raw
                     where meterpointtype = 'E'
                       and usage_flag = 'cancelled'
                     group by account_id) cancelled_elec
                    on all_ids.account_id = cancelled_elec.account_id
-         left join (select account_id, listagg(distinct replace(substring(status from 22), '.', ' '), ',') as status
+         left join (select account_id,
+                           listagg(distinct replace(substring(status from 22), '.', ' '), ',') as status
                     from ref_registrations_meterpoints_status_elec
                     group by account_id) rs_elec
                    on rs_elec.account_id = all_ids.account_id
          left join (select rmr.account_id,
-                           sum((coalesce(attributes_attributevalue, 'N') = 'Y')::int) = count(*) as et
+                           sum((coalesce(attributes_attributevalue, 'N') = 'Y')::int) =
+                           count(*) as et
                     from ref_meterpoints_raw rmr
                              left join ref_meterpoints_attributes rma
                                        on rma.account_id = rmr.account_id and
@@ -176,23 +202,26 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
          left join
      -- GAS ---------------------------------------------------------------------------------------------- GAS
          (select mp_gas.account_id,
-                 count(distinct meterpointnumber)                                as num_meterpoints,
-                 min(greatest(supplystartdate, associationstartdate))            as start_date,
+                 count(distinct meterpointnumber)                     as num_meterpoints,
+                 min(greatest(supplystartdate, associationstartdate)) as start_date,
                  nullif(max(coalesce(least(supplyenddate, associationenddate),
-                                     current_date + 1000)), current_date + 1000) as end_date,
+                                     current_date + 1000)),
+                        current_date + 1000)                          as end_date,
                  --sum(igloo_aq.igl_ind_aq)                                        as igloo_AQ,
                  --sum(industry_aq.estimation_value)                               as industry_AQ,
                  udf_meterpoint_status(
                          min(greatest(supplystartdate, associationstartdate)),
-                         nullif(max(coalesce(least(supplyenddate, associationenddate), current_date + 1000)),
+                         nullif(max(coalesce(
+                                 least(supplyenddate, associationenddate),
+                                 current_date + 1000)),
                                 current_date + 1000)
-                     )                                                           as reg_status,
+                     )                                                as reg_status,
                  case
                      when coalesce(max(mp_gas.associationenddate), current_date + 1000)
                          >= max(mp_gas.supplyenddate) then 'COS'
-                     else 'COT' end                                              as losstype,
-                 max(mp_gas.meter_point_id)                                      as gas_mpid,
-                 min(rma_ldz.attributes_attributevalue)                          as LDZ
+                     else 'COT' end                                   as losstype,
+                 max(mp_gas.meter_point_id)                           as gas_mpid,
+                 min(rma_ldz.attributes_attributevalue)               as LDZ
           from (select *,
                        max(least(supplyenddate, associationenddate))
                        over (partition by account_id, meterpointtype) as mp_end_date
@@ -202,43 +231,54 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
                (select igl_ind_aq,
                        account_id,
                        meterpoint_id,
-                       row_number() over (partition by account_id, register_id order by etlchange desc) as rn
+                       row_number()
+                       over (partition by account_id, register_id order by etlchange desc) as rn
                 from ref_calculated_igl_ind_aq
                 where meter_removed_date isnull) igloo_aq
-               on igloo_aq.account_id = mp_gas.account_id and igloo_aq.meterpoint_id = mp_gas.meter_point_id and
+               on igloo_aq.account_id = mp_gas.account_id and
+                  igloo_aq.meterpoint_id = mp_gas.meter_point_id and
                   igloo_aq.rn = 1
                    left join
                (select estimation_value,
                        account_id,
                        mprn,
-                       row_number() over (partition by account_id, mprn order by effective_from desc) as rn
+                       row_number()
+                       over (partition by account_id, mprn order by effective_from desc) as rn
                 from ref_estimates_gas_internal
                 where islive = true) industry_aq
-               on industry_aq.account_id = mp_gas.account_id and industry_aq.mprn = mp_gas.meterpointnumber and
+               on industry_aq.account_id = mp_gas.account_id and
+                  industry_aq.mprn = mp_gas.meterpointnumber and
                   industry_aq.rn = 1
 
                    left join ref_meterpoints_attributes rma_ldz
                              on rma_ldz.meter_point_id = mp_gas.meter_point_id and
                                 rma_ldz.account_id = mp_gas.account_id and
                                 rma_ldz.attributes_attributename = 'LDZ'
-          where coalesce(datediff(days, least(supplyenddate, associationenddate), mp_end_date), 0) <= 31
-            and (greatest(supplystartdate, associationstartdate) <= least(supplyenddate, associationenddate)
-              or (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
+          where coalesce(
+                        datediff(days, least(supplyenddate, associationenddate),
+                                 mp_end_date), 0) <= 31
+            and (greatest(supplystartdate, associationstartdate) <=
+                 least(supplyenddate, associationenddate)
+              or
+                 (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
           group by mp_gas.account_id) gas_stats
      on gas_stats.account_id = all_ids.account_id
-         left join ref_consumption_accuracy_gas cons_acc_gas on gas_stats.account_id = cons_acc_gas.account_id
+         left join ref_consumption_accuracy_gas cons_acc_gas
+                   on gas_stats.account_id = cons_acc_gas.account_id
          left join (select account_id, count(distinct meterpointnumber) num_mps
                     from ref_meterpoints_raw
                     where meterpointtype = 'G'
                       and usage_flag = 'cancelled'
                     group by account_id) cancelled_gas
                    on all_ids.account_id = cancelled_gas.account_id
-         left join (select account_id, listagg(distinct replace(substring(status from 26), '.', ' '), ',') as status
+         left join (select account_id,
+                           listagg(distinct replace(substring(status from 26), '.', ' '), ',') as status
                     from ref_registrations_meterpoints_status_gas
                     group by account_id) rs_gas
                    on rs_gas.account_id = all_ids.account_id
          left join (select rmr.account_id,
-                           sum((coalesce(attributes_attributevalue, 'N') = 'Y')::int) = count(*) as et
+                           sum((coalesce(attributes_attributevalue, 'N') = 'Y')::int) =
+                           count(*) as et
                     from ref_meterpoints_raw rmr
                              left join ref_meterpoints_attributes rma
                                        on rma.account_id = rmr.account_id and
@@ -250,17 +290,20 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
     -- GAS ---------------------------------------------------------------------------------------------- GAS
 
     -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
-         left join ref_cdb_supply_contracts sc on all_ids.account_id = sc.external_id
+         left join (select * from ref_cdb_supply_contracts where registration_id != 54995) sc
+                   on all_ids.account_id = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
          left join ref_cdb_broker_maps bm on bm.campaign_id = q.campaign_id
-         left join ref_cdb_broker_signups bs on bs.registration_id = sc.registration_id
+         left join (select * from ref_cdb_broker_signups where id != 846) bs on bs.registration_id = sc.registration_id
          left join vw_latest_rates lr on all_ids.account_id = lr.account_id
          left join (select account_id,
-                           min(associationstartdate)                                                   as asd,
-                           sum(case when associationstartdate > supplystartdate then 1 else 0 end) > 0 as HMI
+                           min(associationstartdate) as asd,
+                           sum(case when associationstartdate > supplystartdate then 1 else 0 end) >
+                           0                         as HMI
                     from ref_meterpoints_raw
-                    group by account_id) wl1 on all_ids.account_id = wl1.account_id
+                    group by account_id) wl1
+                   on all_ids.account_id = wl1.account_id
 
     -- STAGE 2 EXTRACTS FOR DIRECT DEBIT & ACCOUNT BALANCE ---------------------------------------------------------
     -- most recent direct debit payment (for payment day of month)
@@ -290,7 +333,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
     -- payment layers for upcoming dd amount (with and without winter uplift)
          left join (select acc_end_dates.account_id,
                            sum(case
-                                   when pl.payment_type_id :: integer = 5 then pl.amount :: double precision
+                                   when pl.payment_type_id :: integer = 5
+                                       then pl.amount :: double precision
                                    else 0 end)                as wu_amount,
                            sum(case
                                    when pl.payment_type_id :: integer = 5 and
@@ -299,7 +343,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
                                    else 0 end) > 0            as wu_app_current,
                            sum(pl.amount :: double precision) as dd_total
                     from (select account_id,
-                                 max(coalesce(least(associationenddate, supplyenddate), current_date)) end_date
+                                 max(
+                                         coalesce(least(associationenddate, supplyenddate), current_date)) end_date
                           from ref_meterpoints
                           group by account_id) acc_end_dates
                              inner join ref_cdb_supply_contracts sc on acc_end_dates.account_id = sc.external_id
@@ -310,8 +355,8 @@ from (select distinct account_id from ref_meterpoints_raw order by account_id) a
                     group by acc_end_dates.account_id) dd_pay_layers
                    on dd_pay_layers.account_id = all_ids.account_id
 where all_ids.account_id not in --exclude known erroneous accounts
-      (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606, 38607, 38741, 38742,
+      (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606,
+       38607, 38741, 38742,
        41025, 46605, 46606)
-  and sc.registration_id != 54995
-  and bs.id != 846
 order by account_id
+;
