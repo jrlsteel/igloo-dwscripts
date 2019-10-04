@@ -52,6 +52,20 @@ create table ref_smart_meter_eligibility_accounts
 alter table ref_smart_meter_eligibility_accounts
     owner to igloo;
 
+create table dwh_spark_logs
+(
+    job_id    integer                                       not null,
+    priority  varchar(10) default 'info'::character varying not null,
+    log_type  varchar(20),
+    message   varchar(65535),
+    etlchange timestamp
+);
+
+alter table dwh_spark_logs
+    owner to igloo;
+
+
+
 
 -- 1 table for Aurora
 
