@@ -13,7 +13,8 @@ from (select cf.account_id,
                  when account_status in ('Final', 'Cancelled') then 'acc_closed'
                  when account_status = 'Pending Final' then 'acc_closing'
                  when missing_meter_details then 'pending_meter_details'
-                 when acc_num_smart > 0 then 'installed'
+                 when acc_num_smart = acc_num_meters then 'installed'
+                 when acc_num_smart > 0 and acc_num_smart < acc_num_meters then 'partial_installed'
                  when num_elec_reg > 1 then 'too_many_elec'
                  when num_elec_reg < 1 then 'no_elec'
                  when num_gas_reg > 1 then 'too_many_gas'
@@ -32,7 +33,7 @@ from (select cf.account_id,
                  when reason in
                       ('acc_closed', 'acc_closing', 'too_many_elec', 'no_elec', 'too_many_gas')
                      then 'ineligible'
-                 when reason in ('installed') then 'installed'
+                 when reason in ('installed', 'partial_installed') then 'installed'
                  else 'pending' end as eligibility
       from vw_customer_file cf
                left join
@@ -41,16 +42,22 @@ from (select cf.account_id,
                    sum(case when meterpointtype = 'E' then num_reg else 0 end) as num_elec_reg,
                    sum(case when meterpointtype = 'G' then num_reg else 0 end) as num_gas_reg,
                    min(ssd)                                                    as ssd,
-                   sum(num_smart)                                              as acc_num_smart
+                   sum(num_smart)                                              as acc_num_smart,
+                   sum(num_meters)                                             as acc_num_meters
             from (select mp.account_id,
                          mp.meter_point_id,
                          count(reg.register_id)                               as num_reg,
                          mp.meterpointtype,
                          min(greatest(associationstartdate, supplystartdate)) as ssd,
                          sum(case
-                                 when nvl(left(rma_type.metersattributes_attributevalue, 2), 'Unknown') in
-                                      ('S', 'S1', 'S2') then 1
-                                 else 0 end)                                  as num_smart
+                                 when (mp.meterpointtype = 'E' and
+                                       nvl(left(rma_type.metersattributes_attributevalue, 2), 'Unknown') in
+                                       ('S1', 'S2')) or
+                                      (mp.meterpointtype = 'G' and
+                                       nvl(left(rma_mech.metersattributes_attributevalue, 2), 'Unknown') in
+                                       ('S1', 'S2')) then 1
+                                 else 0 end)                                  as num_smart,
+                         count(distinct met.meter_id)                         as num_meters
                   from ref_meterpoints mp
                            left join ref_meters met
                                      on met.account_id = mp.account_id and met.meter_point_id = mp.meter_point_id and
@@ -58,6 +65,9 @@ from (select cf.account_id,
                            left join ref_meters_attributes rma_type
                                      on rma_type.account_id = met.account_id and rma_type.meter_id = met.meter_id and
                                         rma_type.metersattributes_attributename = 'MeterType'
+                           left join ref_meters_attributes rma_mech
+                                     on rma_mech.account_id = met.account_id and rma_mech.meter_id = met.meter_id and
+                                        rma_mech.metersattributes_attributename = 'Meter_Mechanism_Code'
                            left join ref_registers reg
                                      on reg.account_id = met.account_id and reg.meter_id = met.meter_id
                            left join ref_meterpoints_attributes rma_es on rma_es.account_id = mp.account_id and
@@ -89,3 +99,9 @@ from (select cf.account_id,
      ) acc_es
 where account_id in (54977, 1831)
 order by account_id;
+
+select distinct metersattributes_attributename
+from ref_meters_attributes
+select distinct metersattributes_attributevalue
+from ref_meters_attributes
+where metersattributes_attributename = 'Meter_Mechanism_Code'
