@@ -1,5 +1,7 @@
 --truncate table ref_smart_meter_eligibility_accounts;
 --insert into ref_smart_meter_eligibility_accounts
+truncate table temp_smea;
+insert into temp_smea
 select account_id,
        eligibility                                                                          as eligibility_status,
        reason                                                                               as detailed_status,
@@ -51,8 +53,9 @@ from (select cf.account_id,
                          min(greatest(associationstartdate, supplystartdate)) as ssd,
                          sum(case
                                  when (mp.meterpointtype = 'E' and
-                                       nvl(left(rma_type.metersattributes_attributevalue, 2), 'Unknown') in
-                                       ('S1', 'S2')) or
+                                       nvl(rma_type.metersattributes_attributevalue, 'Unknown') in
+                                       ('RCAMR', 'S2ADE', 'RCAMY', 'S2AD', 'S1', 'NSS', 'NCAMR', 'S2A'))
+                                          or
                                       (mp.meterpointtype = 'G' and
                                        nvl(left(rma_mech.metersattributes_attributevalue, 2), 'Unknown') in
                                        ('S1', 'S2')) then 1
@@ -97,11 +100,12 @@ from (select cf.account_id,
                                                 (ovr.override_end is null or ovr.override_end >= getdate())) postcode_status
                          on left(addr.postcode, len(addr.postcode) - 3) = postcode_status.postcode_prefix
      ) acc_es
-where account_id in (54977, 1831)
+--where account_id in (54977, 1831)
 order by account_id;
 
 select distinct metersattributes_attributename
 from ref_meters_attributes
 select distinct metersattributes_attributevalue
 from ref_meters_attributes
-where metersattributes_attributename = 'Meter_Mechanism_Code'
+where metersattributes_attributename = 'MeterType'
+
