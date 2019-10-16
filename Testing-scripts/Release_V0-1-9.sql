@@ -19,8 +19,9 @@ where greatest(rm.associationstartdate, rm.supplystartdate) <= getdate()
   and (least(rm.associationenddate, rm.supplyenddate) is null or
        least(rm.associationenddate, rm.supplyenddate) >= getdate())
   and ((ca_elec.account_id is null and rm.meterpointtype = 'E') or
-       (ca_gas.account_id is null and rm.meterpointtype = 'G'));
-
+       (ca_gas.account_id is null and rm.meterpointtype = 'G'))
+and register_id is not null
+order by account_id;
 
 -- 2.1) return accounts where an aq was calculated before but not now
 select *
@@ -113,3 +114,4 @@ from (select meterreadingsourceuid, meterpointtype, count(*) as new_count
       group by meterreadingsourceuid, meterpointtype) rriv_old
      on rriv_new.meterreadingsourceuid = rriv_old.meterreadingsourceuid and
         rriv_new.meterpointtype = rriv_old.meterpointtype;
+
