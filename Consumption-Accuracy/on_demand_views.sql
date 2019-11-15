@@ -235,16 +235,43 @@ from (select mp_elec.account_id                   as account_id,
                read_valid.register_id) st
 ;
 -- view to link the on demand annualised consumption and igl_ind_eac views
+drop view vw_cons_acc_elec_on_demand;
 create or replace view vw_cons_acc_elec_on_demand as
-select coalesce(ac.account_id, iie.account_id)                             as account_id,
-       coalesce(ac.register_id, iie.register_id)                           as register_id,
-       coalesce(ac.annualised_consumption, 0)                              as annualised_consumption,
-       coalesce(ac.read_days_diff_elec, 0)                                 as ac_read_days_diff_elec,
-       coalesce(ac.read_max_created_date_elec, iie.read_max_datetime_elec) as latest_elec_read_date,
-       coalesce(iie.igl_ind_eac, 0)                                        as igl_ind_eac
-from vw_annualised_consumption_elec_on_demand ac
-         full join vw_igloo_ind_eac_on_demand iie
-                   on ac.account_id = iie.account_id and ac.register_id = iie.register_id
+select batch.account_id,
+       nullif(demand.latest_elec_read_date, '1970-01-01')                          as reading_datetime,
+       coalesce(ao.ann_cons_override, demand.annualised_consumption)               as pa_cons_elec,
+       coalesce(ao.igl_ind_override, demand.igl_ind_eac)                           as igl_ind_eac,
+       coalesce(ao.ind_override, batch.ind_eac)                                    as ind_eac,
+       coalesce(ao.quote_override, batch.quotes_eac)                               as quotes_eac,
+       get_best_consumption(coalesce(ao.igl_ind_override, demand.igl_ind_eac),
+                            coalesce(ao.ind_override, batch.ind_eac),
+                            coalesce(ao.ann_cons_override, demand.annualised_consumption),
+                            coalesce(ao.quote_override, batch.quotes_eac), 'elec') as ca_source,
+       case ca_source
+           when 'pa_cons_elec' then coalesce(ao.ann_cons_override, demand.annualised_consumption)
+           when 'igl_ind_eac' then coalesce(ao.igl_ind_override, demand.igl_ind_eac)
+           when 'ind_eac' then coalesce(ao.ind_override, batch.ind_eac)
+           when 'quotes_eac' then coalesce(ao.quote_override, batch.quotes_eac)
+           end                                                                     as ca_value,
+       demand.ac_read_days_diff_elec,
+       batch.etlchange
+from (select acc_id                                        as account_id,
+             sum(annualised_consumption)                   as annualised_consumption,
+             min(ac_read_days_diff_elec)                   as ac_read_days_diff_elec,
+             min(nvl(latest_elec_read_date, '1970-01-01')) as latest_elec_read_date,
+             sum(igl_ind_eac)                              as igl_ind_eac
+      from (select coalesce(ac.account_id, iie.account_id) as acc_id,
+                   coalesce(ac.annualised_consumption, 0)  as annualised_consumption,
+                   coalesce(ac.read_days_diff_elec, 0)     as ac_read_days_diff_elec,
+                   coalesce(ac.read_max_created_date_elec,
+                            iie.read_max_datetime_elec)    as latest_elec_read_date,
+                   coalesce(iie.igl_ind_eac, 0)            as igl_ind_eac
+            from vw_annualised_consumption_elec_on_demand ac
+                     full join vw_igloo_ind_eac_on_demand iie
+                               on ac.account_id = iie.account_id and ac.register_id = iie.register_id) register_level
+      group by acc_id) demand
+         inner join ref_consumption_accuracy_elec batch on batch.account_id = demand.account_id
+         left join vw_cons_acc_account_overrides ao on ao.account_id = demand.account_id and ao.meterpointtype = 'E'
 ;
 
 -- GAS --
@@ -543,15 +570,42 @@ from (
      ) calc_params
 ;
 
--- view to link the on demand annualised consumption and igl_ind_eac views
+-- view to link the on demand annualised consumption and igl_ind_aq views
+drop view vw_cons_acc_gas_on_demand;
 create or replace view vw_cons_acc_gas_on_demand as
-select coalesce(ac.account_id, iie.account_id)                           as account_id,
-       coalesce(ac.register_id, iie.register_id)                         as register_id,
-       coalesce(ac.annualised_consumption, 0)                            as annualised_consumption,
-       coalesce(ac.read_days_diff_gas, 0)                                as ac_read_days_diff_gas,
-       coalesce(ac.read_max_created_date_gas, iie.read_max_datetime_gas) as latest_gas_read_date,
-       coalesce(iie.igl_ind_aq, 0)                                       as igl_ind_aq
-from vw_annualised_consumption_gas_on_demand ac
-         full join vw_igloo_ind_aq_on_demand iie
-                   on ac.account_id = iie.account_id and ac.register_id = iie.register_id
+select batch.account_id,
+       nullif(demand.latest_gas_read_date, '1970-01-01')                         as reading_datetime,
+       coalesce(ao.ann_cons_override, demand.annualised_consumption)             as pa_cons_gas,
+       coalesce(ao.igl_ind_override, demand.igl_ind_aq)                          as igl_ind_aq,
+       coalesce(ao.ind_override, batch.ind_aq)                                   as ind_aq,
+       coalesce(ao.quote_override, batch.quotes_aq)                              as quotes_aq,
+       get_best_consumption(coalesce(ao.igl_ind_override, demand.igl_ind_aq),
+                            coalesce(ao.ind_override, batch.ind_aq),
+                            coalesce(ao.ann_cons_override, demand.annualised_consumption),
+                            coalesce(ao.quote_override, batch.quotes_aq), 'gas') as ca_source,
+       case ca_source
+           when 'pa_cons_gas' then coalesce(ao.ann_cons_override, demand.annualised_consumption)
+           when 'igl_ind_aq' then coalesce(ao.igl_ind_override, demand.igl_ind_aq)
+           when 'ind_aq' then coalesce(ao.ind_override, batch.ind_aq)
+           when 'quotes_aq' then coalesce(ao.quote_override, batch.quotes_aq)
+           end                                                                   as ca_value,
+       demand.ac_read_days_diff_gas,
+       batch.etlchange
+from (select acc_id                                       as account_id,
+             sum(annualised_consumption)                  as annualised_consumption,
+             min(ac_read_days_diff_gas)                   as ac_read_days_diff_gas,
+             min(nvl(latest_gas_read_date, '1970-01-01')) as latest_gas_read_date,
+             sum(igl_ind_aq)                              as igl_ind_aq
+      from (select coalesce(ac.account_id, iie.account_id) as acc_id,
+                   coalesce(ac.annualised_consumption, 0)  as annualised_consumption,
+                   coalesce(ac.read_days_diff_gas, 0)      as ac_read_days_diff_gas,
+                   coalesce(ac.read_max_created_date_gas,
+                            iie.read_max_datetime_gas)     as latest_gas_read_date,
+                   coalesce(iie.igl_ind_aq, 0)             as igl_ind_aq
+            from vw_annualised_consumption_gas_on_demand ac
+                     full join vw_igloo_ind_aq_on_demand iie
+                               on ac.account_id = iie.account_id and ac.register_id = iie.register_id) register_level
+      group by acc_id) demand
+         inner join ref_consumption_accuracy_gas batch on batch.account_id = demand.account_id
+         left join vw_cons_acc_account_overrides ao on ao.account_id = demand.account_id and ao.meterpointtype = 'G'
 ;
