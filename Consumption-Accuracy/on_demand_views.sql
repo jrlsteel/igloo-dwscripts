@@ -78,7 +78,7 @@ from (
      ) st;
 ;
 -- igl_ind_eac on demand update
-create view vw_igloo_ind_eac_on_demand as
+create or replace view vw_igloo_ind_eac_on_demand as
 select st.account_id,
        st.elec_GSP,
        st.elec_ssc,
@@ -276,8 +276,103 @@ from (select acc_id                                        as account_id,
 
 -- GAS --
 
+-- update to readings internal pa view
+create or replace view vw_corrected_round_clock_reading_pa(account_id, meter_point_id, meter_id, meter_reading_id, register_id,
+                                                register_reading_id, billable, haslivecharge, hasregisteradvance,
+                                                meterpointnumber, meterpointtype, meterreadingcreateddate,
+                                                meterreadingdatetime, meterreadingsourceuid, meterreadingstatusuid,
+                                                meterreadingtypeuid, meterserialnumber, registerreference, required,
+                                                no_of_digits, readingvalue, previous_reading, current_reading,
+                                                max_previous_reading, max_reading, corrected_reading, meter_rolled_over,
+                                                etlchange) as
+SELECT s.account_id,
+       s.meter_point_id,
+       s.meter_id,
+       s.meter_reading_id,
+       s.register_id,
+       s.register_reading_id,
+       s.billable,
+       s.haslivecharge,
+       s.hasregisteradvance,
+       s.meterpointnumber,
+       s.meterpointtype,
+       s.meterreadingcreateddate,
+       s.meterreadingdatetime,
+       s.meterreadingsourceuid,
+       s.meterreadingstatusuid,
+       s.meterreadingtypeuid,
+       s.meterserialnumber,
+       s.registerreference,
+       s.required,
+       s.no_of_digits,
+       s.readingvalue,
+       s.previous_reading,
+       s.current_reading,
+       s.max_previous_reading,
+       s.max_reading,
+       round_the_clock_reading_check_digits_v1(s.current_reading,
+                                               s.previous_reading,
+                                               s.max_reading,
+                                               CASE
+                                                   WHEN ((s.max_previous_reading <> s.current_reading) AND
+                                                         (s.max_previous_reading > (s.max_reading - (10000)::double precision)))
+                                                       THEN 'Y'::character varying
+                                                   ELSE 'N'::character varying END) AS corrected_reading,
+       CASE
+           WHEN ((s.max_previous_reading <> s.current_reading) AND
+                 (s.max_previous_reading > (s.max_reading - (10000)::double precision))) THEN 'Y'::character varying
+           ELSE 'N'::character varying END                                          AS meter_rolled_over,
+       ('now'::character varying)::timestamp with time zone                         AS etlchange
+FROM (SELECT ri.account_id,
+             ri.meter_point_id,
+             ri.meter_id,
+             ri.meter_reading_id,
+             ri.register_id,
+             ri.register_reading_id,
+             ri.billable,
+             ri.haslivecharge,
+             ri.hasregisteradvance,
+             ri.meterpointnumber,
+             ri.meterpointtype,
+             ri.meterreadingcreateddate,
+             ri.meterreadingdatetime,
+             ri.meterreadingsourceuid,
+             ri.meterreadingstatusuid,
+             ri.meterreadingtypeuid,
+             ri.meterserialnumber,
+             ri.readingvalue,
+             ri.registerreference,
+             ri.required,
+             COALESCE((rega.registersattributes_attributevalue)::integer, 0)                                                                           AS no_of_digits,
+             COALESCE(pg_catalog.lead(ri.readingvalue, 1)
+                      OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC),
+                      (0)::double precision)                                                                                                           AS previous_reading,
+             COALESCE(ri.readingvalue, (0)::double precision)                                                                                          AS current_reading,
+             (power((10)::double precision,
+                    (COALESCE((rega.registersattributes_attributevalue)::integer, 0))::double precision) -
+              (1)::double precision)                                                                                                                   AS max_reading,
+             "max"(ri.readingvalue)
+             OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS max_previous_reading
+      FROM (ref_readings_internal_pa ri
+               LEFT JOIN ref_registers_attributes rega
+                         ON ((((rega.register_id = ri.register_id) AND (rega.account_id = ri.account_id)) AND
+                              ((rega.registersattributes_attributename)::text =
+                               ('No_Of_Digits'::character varying)::text))))
+      WHERE (((((((ri.meterreadingsourceuid)::text = ('CUSTOMER'::character varying)::text) AND
+                 ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
+                ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true)) OR
+              (((((ri.meterreadingsourceuid)::text = ('DC'::character varying)::text) AND
+                 ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
+                ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true))) OR
+             (((((ri.meterreadingsourceuid)::text = ('DCOPENING'::character varying)::text) AND
+                ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
+               ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true)))
+      ORDER BY ri.account_id, ri.register_id, ri.meterreadingdatetime) s;
+alter table vw_corrected_round_clock_reading_pa
+    owner to igloo;
+
 -- view for readings from ensek and nrl
-create view vw_readings_aq_all_on_demand as
+create or replace view vw_readings_aq_all_on_demand as
 select account_id,
        register_id,
        meterpointnumber,
@@ -446,7 +541,7 @@ from (select mp_gas.account_id                                                  
                rma_imp.attributes_attributevalue) st
 ;
 -- igl_ind_eac on demand update
-create view vw_igloo_ind_aq_on_demand as
+create or replace view vw_igloo_ind_aq_on_demand as
 select account_id,
        LDZ                                                             as gas_ldz,
        gas_imperial_meter_indicator,
