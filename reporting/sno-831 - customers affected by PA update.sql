@@ -71,14 +71,11 @@ select account_id,
        first_name,
        last_name,
        email,
-       direct_debit,
-       account_balance,
+       -direct_debit as direct_debit,
+       -account_balance as account_balance,
        balance_over_dd,
-       ssd,
-       most_recent_reading
-from full_details where fail_old_pa and not fail_new_pa
+       trunc(ssd) as ssd,
+       trunc(most_recent_reading) as most_recent_reading
+from full_details where fail_old_pa and datediff(days, ssd, getdate()) > 90
+order by account_balance
 ;
-
-select account_id, max(meterreadingdatetime) as most_recent_reading
-from ref_readings_internal_valid
-group by account_id
