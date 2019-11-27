@@ -2,7 +2,7 @@
 DROP TABLE IF EXISTS #temp_tado_eff;
 
 
-
+create table temp_new_tado as
 select x2.user_id,
        x2.account_id,
        x2.supply_address_id,
@@ -59,7 +59,7 @@ select x2.user_id,
        getdate()                                     as etlchange
 
 
-into #temp_tado_eff ---- TEMP TABLE ---
+--into #temp_tado_eff ---- TEMP TABLE ---
 
 --Model 3rd Level Inputs
 from (select x1.*,
