@@ -19,29 +19,29 @@ SELECT * FROM ref_calculated_tado_efficiency_batch_191127;
 -- 4 ---  Replace null values in key fields with -1 (a value no actual row will have) ---
 
 --- temp_tado_new ---
-UPDATE temp_tado_new t
+UPDATE temp_tado_new
 set user_id = -1
 where user_id is null;
 
-UPDATE temp_tado_new t
+UPDATE temp_tado_new
 set account_id = -1
 where account_id is null;
 
-UPDATE temp_tado_new t
+UPDATE temp_tado_new
 set supply_address_id = -1
 where supply_address_id is null;
 
 
 --- temp_tado_old ---
-UPDATE temp_tado_old t
+UPDATE temp_tado_old
 set user_id = -1
 where user_id is null;
 
-UPDATE temp_tado_old t
+UPDATE temp_tado_old
 set account_id = -1
 where account_id is null;
 
-UPDATE temp_tado_old t
+UPDATE temp_tado_old
 set supply_address_id = -1
 where supply_address_id is null;
 
