@@ -485,5 +485,4 @@ where all_ids.account_id not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606,
        38607, 38741, 38742,
        41025, 46605, 46606)
-and all_ids.account_id = 7786
 order by account_id
