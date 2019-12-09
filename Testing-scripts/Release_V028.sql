@@ -31,6 +31,13 @@ UPDATE temp_tado_new
 set supply_address_id = -1
 where supply_address_id is null;
 
+update temp_tado_new
+set avg_savings_perc = 0
+where true;
+
+update temp_tado_new
+set savings_in_pounds = 0
+where true;
 
 --- temp_tado_old ---
 UPDATE temp_tado_old
@@ -45,6 +52,13 @@ UPDATE temp_tado_old
 set supply_address_id = -1
 where supply_address_id is null;
 
+update temp_tado_old
+set avg_savings_perc = 0
+where true;
+
+update temp_tado_old
+set savings_in_pounds = 0
+where true;
 
 -- 5 ---  Set up comparison SQL to compare temp_tado_old and temp_tado_new ---
 

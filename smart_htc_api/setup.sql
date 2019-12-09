@@ -1,104 +1,83 @@
-select *
-from ref_cdb_supply_contracts
-where external_id = 54977
-
-select *
-from ref_registers
-where account_id = 54977
-
-select *
-from ref_cdb_addresses
-where id = 53261
-
-select *
-from ref_cdb_attributes
-where attribute_type_id = 2
-  and entity_id = 53261
-
-select *
-from ref_cdb_attribute_values
-where attribute_type_id = 2
-
-select *
-from ref_cdb_attribute_types {
-     "my_reference":
-     "string",
-     "location": {
-     "latitude": 0,
-     "longitude": 0,
-     "postcode":
-     "string"
-    },
-     "floor_area": 0,
-     "attachment":
-     "Detached",
-     "renewables": true,
-     "heating_type":
-     "Other"
-    }
-
-select distinct photo_supply
-from ref_epc_certificates
-
-select su.external_id                              as account_id,
-       up.user_id                                  as user_id,
-       addr.uprn,
-       lreg.uprn,
-       s2epc.lmk_key,
-       s2epc.building_reference_number             as brn,
-       (select top 1 igloo_aq
-        from ref_calculated_aq a
-        where su.external_id = a.account_id
-        order by a.read_max_created_date_gas desc) as aq,
-       s2epc.*
-from ref_cdb_supply_contracts su
-         inner join ref_cdb_addresses addr on su.supply_address_id = addr.id
-         inner join ref_cdb_user_permissions up on su.id = up.permissionable_id and permission_level = 0
-    and permissionable_type = 'App\\\SupplyContract'
-         inner join ref_cdb_users u on u.id = up.user_id
-         left outer join ref_epc_certificates s2epc on trim(addr.postcode) = REPLACE(s2epc.postcode, ' ', '')
-         left outer join ref_land_registry lreg on lreg.uprn = addr.uprn
-WHERE public.epcaddressmapping(sub_building_name_number,
-                               building_name_number,
-                               thoroughfare,
-                               dependent_locality) = trim(lower(replace(replace(s2epc.address, '- ', ' '), '-', ' ')))
-
-select *
-from ref_cdb_user_permissions
-where permissionable_type = 'App\\SupplyContract'
-
-
 select sc.external_id,
-       addr.id as my_reference,
+       addr.id              as my_reference,
        pc.latitude,
        pc.longitude,
-       addr.postcode
+       addr.postcode,
+       epc.total_floor_area as floor_area,
+       case
+           when epc.property_type is not null then
+               case
+                   when epc.property_type in ('Flat', 'Maisonette') then
+                       case
+                           when epc.floor_level ilike 'ground%' then
+                               'ground floor flat'
+                           when epc.floor_level ilike 'top floor' or epc.flat_top_storey = 'Y' then
+                               'top floor flat'
+                           else
+                               'mid floor flat'
+                           end
+                   else case epc.built_form
+                            when 'Enclosed End-Terrace' then 'End terrace'
+                            when 'End-Terrace' then 'End terrace'
+                            when 'Enclosed Mid-Terrace' then 'Mid terrace'
+                            when 'Mid-Terrace' then 'Mid terrace'
+                            when 'Detached' then 'Detached'
+                            when 'Semi-Detached' then 'Semi-detached'
+                       end
+                   end
+           else
+               case p_type.property_type_id
+                   when 1 then 'Detached'
+                   when 2 then 'Semi-detached'
+                   when 3 then 'End terrace'
+                   when 4 then 'Mid terrace'
+                   when 5 then 'Detached'
+                   when 6 then 'mid floor flat'
+                   when 7 then 'mid floor flat'
+                   end
+           end              as attachment,
+       case
+           when nvl(epc.wind_turbine_count, 0) > 0 or
+                nvl(epc.solar_water_heating_flag, 'N') = 'Y' or
+                nvl(epc.photo_supply, 0) > 0 then 'true'
+           else 'false' end as renewables,
+       case
+           when mmh_fuel_type.fuel is not null then mmh_fuel_type.fuel
+           when q.heating_type in ('gas', 'electricity', 'other') then q.heating_type
+           else null
+           end              as heating_type
 from ref_cdb_supply_contracts sc
          inner join ref_cdb_addresses addr on sc.supply_address_id = addr.id
          left join ref_postcodes pc on replace(pc.postcode, ' ', '') = replace(addr.postcode, ' ', '')
          left join ref_cdb_registrations r on r.id = sc.registration_id
          left join ref_cdb_quotes q on r.quote_id = q.id
-         left join ref_cdb_attributes attr
-                   on attr.entity_type ilike 'App%Address' and attr.entity_id = addr.id and attribute_type_id = 5
-where sc.external_id = 54977
-
-select entity_id,
-       listagg(distinct case attribute_value_id
-                            when 29 then 'e'
-                            when 30 then 'e'
-                            when 32 then 'e'
-                            when 33 then 'g'
-                            when 26 then 'g'
-                            when 31 then 'o'
-                            when 28 then 'o'
-           end) as fuels
-from ref_cdb_attributes
-where attribute_type_id = 5
-group by entity_id
-having len(fuels) > 1
-
--- 5)
-truncate table ref_compare_sql_config;
-INSERT INTO ref_compare_sql_config (old_table, new_table, key_cols, destination)
-VALUES ('temp_tado_old', 'temp_tado_new', 'user_id, account_id, supply_address_id', 'temp_tado_diffs');
-
+         left join (select entity_id as supply_address_id,
+                           case min(case attribute_value_id
+                                        when 26 then 1
+                                        when 27 then 3
+                                        when 28 then 3
+                                        when 29 then 2
+                                        when 30 then 2
+                                        when 31 then 3
+                                        when 32 then 2
+                                        when 33 then 1
+                               end)
+                               when 1 then 'gas'
+                               when 2 then 'elec'
+                               when 3 then 'other'
+                               end   as fuel
+                    from ref_cdb_attributes
+                    where attribute_type_id = 5
+                      and (effective_to is null or effective_to > getdate())
+                    group by entity_id) mmh_fuel_type on mmh_fuel_type.supply_address_id = sc.supply_address_id
+         left join ref_epc_certificates epc on
+            regexp_replace(lower(nvl(addr.sub_building_name_number, '') +
+                                 nvl(addr.building_name_number, '') +
+                                 nvl(addr.thoroughfare, '') +
+                                 nvl(addr.dependent_locality, '')), '[^a-z0-9]', '') =
+            regexp_replace(lower(epc.address), '[^a-z0-9]', '') and
+            replace(addr.postcode, ' ', '') = replace(epc.postcode, ' ', '')
+         left join (select entity_id as address_id, max(attribute_value_id) property_type_id
+                    from ref_cdb_attributes
+                    where attribute_type_id = 2
+                    group by entity_id) p_type on p_type.address_id = sc.supply_address_id
