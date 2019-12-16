@@ -52,8 +52,8 @@ from (select distinct max(tr.sourcedate::timestamp)
                            WHEN '_M' THEN '23'
                       END                                                          as gsp_region_code,
 
-                      CASE WHEN LEFT(CAST(rmp.meterpointnumber as text), 2) = '24' THEN gsp_region_code
-                           WHEN LEFT(CAST(rmp.meterpointnumber as text), 2) != '24' THEN region_code
+                      CASE WHEN LEFT(rmp.meterpointnumber, 2) = '24' THEN gsp_region_code
+                           else region_code
                       END                                                          as region_code_mpan,
 
 
