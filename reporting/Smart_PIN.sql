@@ -33,10 +33,35 @@ from (select distinct max(tr.sourcedate::timestamp)
                       rmp.meterpointnumber                                         as MPXN,
                       null                                                         as EXPORTMPAN,
                       null                                                         as SECONDARYIMPORTMPAN,
+
+
+                       CASE rma_gsp.attributes_attributevalue
+                           WHEN '_A' THEN '10'
+                           WHEN '_B' THEN '11'
+                           WHEN '_C' THEN '12'
+                           WHEN '_D' THEN '13'
+                           WHEN '_E' THEN '14'
+                           WHEN '_F' THEN '15'
+                           WHEN '_G' THEN '16'
+                           WHEN '_P' THEN '17'
+                           WHEN '_N' THEN '18'
+                           WHEN '_J' THEN '19'
+                           WHEN '_H' THEN '20'
+                           WHEN '_K' THEN '21'
+                           WHEN '_L' THEN '22'
+                           WHEN '_M' THEN '23'
+                      END                                                          as gsp_region_code,
+
+                      CASE WHEN LEFT(CAST(rmp.meterpointnumber as text), 2) = '24' THEN gsp_region_code
+                           WHEN LEFT(CAST(rmp.meterpointnumber as text), 2) != '24' THEN region_code
+                      END                                                          as region_code_mpan,
+
+
                       case DEVICETYPE
-                          when 0 then 'ELECPION' || region_code
-                          when 1 then 'GASPION' || region_code
+                          when 0 then 'ELECPION' || region_code_mpan
+                          when 1 then 'GASPION' || region_code_mpan
                           else null end                                            as TARIFF,
+
                       case DEVICETYPE
                           when 0 then 'ACCELERO_DEFAULT_ESME_001'
                           when 1 then 'ACCELERO_DEFAULT_GSME_001'
@@ -76,4 +101,11 @@ from (select distinct max(tr.sourcedate::timestamp)
                          on consent_id.attribute_type_id = 23 and consent_id.entity_id = sc.id
                left join ref_cdb_attribute_values consent_type
                          on consent_type.attribute_type_id = 23 and consent_type.id = consent_id.attribute_value_id
+
+               ---- Added: T.A -- DMRE-943
+               inner join ref_meterpoints_attributes rma_gsp
+                          on rmp.account_id = rma_gsp.account_id
+                          and rmp.meter_point_id = rma_gsp.meter_point_id
+                          and rma_gsp.attributes_attributename = 'GSP'
+
       where left(ba.status, 9) != 'cancelled' and $__timeFilter(ba.created_at)) calc
