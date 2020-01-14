@@ -1,3 +1,4 @@
+create table temp_reporting_dcf as
 select all_ids.account_id                                                                   as account_id,
        elec_stats.start_date                                                                as Elec_SSD,
        gas_stats.start_date                                                                 as Gas_SSD,
@@ -107,42 +108,48 @@ select all_ids.account_id                                                       
        bm.map_name                                                                          as broker_name,
        bs.broker_urn,
        sc.created_at                                                                        as signup_date,
-       case q.campaign_id
-           when 1 then 'Broker signups from Quotezone.'
-           when 2 then 'Broker signups from MoneySuperMarket.'
-           when 3 then 'Promoting our Facebook Trustpilot score.'
-           when 4 then 'Broker signups from FirstHelpline.'
-           when 5 then 'Broker signups from Dixons Carphone Warehouse.'
-           when 6 then 'Broker signups from Energylinx.'
-           when 7 then 'Refer a Friend scheme'
-           when 8 then 'Promotion for EV 1200 free miles scheme'
-           when 9
-               then 'Customers signing up through the TeenTech link will receive a £100 reward.'
-           when 10 then 'Broker signups from MoneyExpert.'
-           when 11 then 'Campaign for tracking signups during the Christmas lights sponsorship'
-           when 12 then 'Campaign for tracking signups via radio adverts during the Christmas lights sponsorship'
-           when 13 then 'Campaign for tracking signups via QR code during the Christmas lights sponsorship'
-           else q.campaign_id::varchar(3)
-           end                                                                              as campaign,
-       cons_acc_elec.quotes_eac                                                             as quoted_eac,
-       cons_acc_gas.quotes_aq                                                               as quoted_aq,
+       camp.description                                                                     as campaign,
+       nvl(case
+               when q.electricity_usage is null then
+                       (q.electricity_projected - (3.65 * q.electricity_standing)) / (q.electricity_unit / 100)
+               else q.electricity_usage end, 0)                                             as quoted_eac,
+       nvl(case
+               when q.gas_usage is null then
+                   (q.gas_projected - (3.65 * q.gas_standing)) / (q.gas_unit / 100)
+               else q.gas_usage end, 0)                                                     as quoted_aq,
        q.projected_cost                                                                     as quoted_total_spend,
        datediff(days, least(Elec_SSD, Gas_SSD), payment_stats.first_payment_datetime) <= 10 as first_payment_success,
        payment_stats.num_payments                                                           as num_payments,
 
        payment_stats.latest_payment_datetime                                                as latest_dd_received_date,
-       getdate() > dateadd(months, 1, payment_stats.latest_payment_datetime) and
-       (acc_ed is null or
-        dateadd(months, 1, payment_stats.latest_payment_datetime) < acc_ed)                 as expected_payment_missing,
+       coalesce(latest_dd_received_date, '1970-01-01') >= dateadd(months, -1, getdate())    as payment_in_last_month,
        left(addr.postcode, len(addr.postcode) - 3)                                          as outcode,
        bill_info.first_bill_date,
        bill_info.first_bill_type,
        bill_info.latest_bill_date,
-       bill_info.latest_bill_type,
+       case
+           when final_bills.first_final_bill_date is not null and
+                final_bills.first_final_bill_date != bill_info.latest_bill_date then 'Final_Rebill'
+           else
+               bill_info.latest_bill_type end                                               as latest_bill_type,
        bill_info.num_bills,
        final_bills.first_final_bill_date,
-       final_bills.first_final_refund_date
-
+       final_bills.first_final_refund_date,
+       acc_sett.billdayofmonth::int                                                         as monthly_bill_date,
+       acc_sett.nextbilldate::timestamp                                                     as next_bill_date,
+       case
+           when acc_ssd is null then null
+           when date_part(day, acc_ssd + 18) <= monthly_bill_date then
+               (date_trunc('month', acc_ssd + 18) + monthly_bill_date - 1) :: timestamp
+           else
+               (last_day(dateadd(day, 18, acc_ssd)) + monthly_bill_date) :: timestamp
+           end                                                                              as first_bill_effective_date,
+       billing_performance.perf1                                                            as bill_perf_1,
+       billing_performance.perf2                                                            as bill_perf_2,
+       billing_performance.perf3                                                            as bill_perf_3,
+       occ_acc_current.account_id is not null                                               as occupier_account,
+       coalesce(occ_acc_current.days_since_cot, occ_acc_hist.days_since_cot)                as days_as_occ_acc,
+       getdate()                                                                            as etlchange
 from (select distinct account_id
       from ref_meterpoints_raw
       order by account_id) all_ids
@@ -209,7 +216,7 @@ from (select distinct account_id
                  (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
           group by mp_elec.account_id) elec_stats
      on all_ids.account_id = elec_stats.account_id
-         left join vw_cons_acc_elec cons_acc_elec
+         left join vw_cons_acc_elec_all cons_acc_elec
                    on elec_stats.account_id = cons_acc_elec.account_id
          left join (select rmr_elec.account_id,
                            count(meterpointnumber)                                         num_mps,
@@ -308,7 +315,7 @@ from (select distinct account_id
                  (supplyenddate isnull and associationenddate isnull)) --non-cancelled meterpoints only
           group by mp_gas.account_id) gas_stats
      on gas_stats.account_id = all_ids.account_id
-         left join vw_cons_acc_gas cons_acc_gas
+         left join vw_cons_acc_gas_all cons_acc_gas
                    on gas_stats.account_id = cons_acc_gas.account_id
          left join (select rmr_gas.account_id,
                            count(meterpointnumber)                                     as num_mps,
@@ -347,6 +354,7 @@ from (select distinct account_id
                    on all_ids.account_id = sc.external_id
          left join ref_cdb_registrations r on sc.registration_id = r.id
          left join ref_cdb_quotes q on q.id = r.quote_id
+         left join aws_s3_stage2_extracts.stage2_cdbcampaigns camp on q.campaign_id = camp.id
          left join ref_cdb_broker_maps bm on bm.campaign_id = q.campaign_id
          left join ref_cdb_broker_signups bs on bs.registration_id = sc.registration_id and bs.id != 846
          left join vw_latest_rates lr on all_ids.account_id = lr.account_id
@@ -422,6 +430,7 @@ from (select distinct account_id
                              (select account_id,
                                      current_bill_date as bill_date,
                                      case
+                                         when min(num_readings) = 0 then 'No_Readings'
                                          when sum(valid_read_missing) = 0 then 'Actual'
                                          when min(valid_read_missing) = 0 then 'Partial'
                                          else 'Estimated'
@@ -431,6 +440,7 @@ from (select distinct account_id
                                            rri.meter_point_id,
                                            rri.meter_id,
                                            rri.register_id,
+                                           count(rri.register_id)                            as num_readings,
                                            min((rri.meterreadingtypeuid = 'ESTIMATED')::int) as valid_read_missing
                                     from (select account_id,
                                                  creationdetail_createddate as current_bill_date,
@@ -439,10 +449,12 @@ from (select distinct account_id
                                                      '1970-01-01')          as prev_bill_date
                                           from ref_account_transactions
                                           where transactiontype = 'BILL') bill_dates
-                                             inner join ref_readings_internal rri
-                                                        on rri.account_id = bill_dates.account_id and
-                                                           rri.meterreadingdatetime between bill_dates.prev_bill_date and bill_dates.current_bill_date
-                                    group by bill_dates.account_id, bill_dates.current_bill_date, rri.meter_point_id,
+                                             left join ref_readings_internal rri
+                                                       on rri.account_id = bill_dates.account_id and
+                                                          rri.meterreadingcreateddate between bill_dates.prev_bill_date and bill_dates.current_bill_date
+                                    group by bill_dates.account_id,
+                                             bill_dates.current_bill_date,
+                                             rri.meter_point_id,
                                              rri.meter_id,
                                              rri.register_id) bill_register_read_types
                               group by account_id, current_bill_date)
@@ -481,6 +493,40 @@ from (select distinct account_id
                                        on refunds.account_id = acc_eds.account_id and refunds.transactiontype = 'R' and
                                           refunds.creationdetail_createddate >= bills.creationdetail_createddate
                     group by acc_eds.account_id) final_bills on final_bills.account_id = all_ids.account_id
+         left join (select account_id::bigint, billdayofmonth::int, nextbilldate::timestamp
+                    from aws_s3_stage2_extracts.stage2_accountsettings) acc_sett
+                   on acc_sett.account_id = all_ids.account_id
+         left join (select bill_dates.acc_id,
+                           min(case
+                                   when rat.creationdetail_createddate between bd1 - 5 and bd1 + 15
+                                       then datediff(days, bd1, rat.creationdetail_createddate)
+                                   else null end) as perf1,
+                           min(case
+                                   when rat.creationdetail_createddate between bd2 - 5 and bd2 + 15
+                                       then datediff(days, bd2, rat.creationdetail_createddate)
+                                   else null end) as perf2,
+                           min(case
+                                   when rat.creationdetail_createddate between bd3 - 5 and bd3 + 15
+                                       then datediff(days, bd3, rat.creationdetail_createddate)
+                                   else null end) as perf3
+
+                    from (select account_id::bigint                 as acc_id,
+                                 dateadd('month', -1, nextbilldate) as most_recent_bd,
+                                 case
+                                     when most_recent_bd + 15 >= trunc(getdate())
+                                         then dateadd('month', -1, most_recent_bd)
+                                     else most_recent_bd end        as bd1,
+                                 dateadd('month', -1, bd1)          as bd2,
+                                 dateadd('month', -1, bd2)          as bd3
+                          from (select account_id::bigint as account_id, nextbilldate::timestamp as nextbilldate
+                                from aws_s3_stage2_extracts.stage2_accountsettings) acc_sett) bill_dates
+                             left join ref_account_transactions rat
+                                       on rat.account_id = bill_dates.acc_id and rat.transactiontype = 'BILL'
+                    group by bill_dates.acc_id
+                    order by bill_dates.acc_id) billing_performance on billing_performance.acc_id = all_ids.account_id
+-- occupier accounts
+         left join ref_occupier_accounts occ_acc_current on occ_acc_current.account_id = all_ids.account_id
+         left join ref_occupier_accounts_archive occ_acc_hist on occ_acc_hist.account_id = all_ids.account_id
 where all_ids.account_id not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606,
        38607, 38741, 38742,
