@@ -172,139 +172,122 @@ from (select x1.*,
 
 
                    -- Model 1st Level Inputs
-            from (select user_id,
-                         account_id,
-                         supply_address_id,
-                         postcode,
-
-                         max(sr_user_id)                           as sr_user_id, --
-                         cast(max(base_temp) as double precision)  as base_temp,
-                         20.00                                     as default_base_temp,
-
-
-                         max(heating_basis)                        as heating_basis,
-                         coalesce(nullif(max(heating_controls), ''),
-                                  max(heating_control_type))       as heating_control_type,
-                         max(heating_source)                       as heating_source,
-                         max(house_bedrooms)                       as house_bedrooms,
-                         max(house_type)                           as house_type,
-                         max(house_age)                            as house_age,
-
-
-                         (select listagg(distinct mp.meterpointtype)
-                          from ref_meterpoints mp
-                          where mp.account_id = l1.account_id ---- su.external_id
-                                --and (mp.supplyenddate is null or mp.supplyenddate >= getdate())
-                          group by mp.account_id)                  as fuel_type,
-                         coalesce(max(attribute_custom_value), '') as ages, -- TODO: this doesn't select age fields, just anything with a custom value.
-                         max(family_category)                      as family_category
-
-
-                  from
-                      ----- New SUB-QUERY : Added: T.A ; Purpose: Improve Query Performance ;  Date: 15/11/2019 -----
-                      (
-                          select u.id                      as user_id,
-                                 su.external_id            as account_id,
-                                 su.supply_address_id      as supply_address_id,
-                                 addr.postcode             as postcode,
-                                 sr.user_id                as sr_user_id,
-                                 at.attribute_custom_value as attribute_custom_value,
-
-                                 case
-                                     when att.attribute_name = 'temperature_preference' then av.attribute_value
-                                     else '-99' end        as base_temp,
-
-                                 case
-                                     when att.attribute_name = 'heating_basis' then av.attribute_value
-                                     else '' end           as heating_basis,
-                                 case
-                                     when att.attribute_name = 'heating_control_type' then av.attribute_value
-                                     else '' end           as heating_control_type,
-                                 case
-                                     when att.attribute_name = 'heating_type' then av.attribute_value
-                                     else '' end           as heating_source,
-                                 case
-                                     when att.attribute_name = 'house_bedrooms' then av.attribute_value
-                                     else '' end           as house_bedrooms,
-                                 case
-                                     when att.attribute_name = 'house_type' then av.attribute_value
-                                     else '' end           as house_type,
-                                 case
-                                     when att.attribute_name = 'house_age' then av.attribute_value
-                                     else '' end           as house_age,
-                                 case
-                                     when att.attribute_name = 'resident_ages'
-                                         then tado_heating_summary(coalesce(at.attribute_custom_value, ''))
-                                     else '' end           as family_category,
-                                 case
-                                     when att.attribute_name = 'heating_controls'
-                                         then case json_extract_path_text(at.attribute_custom_value, 'type') + '~' +
-                                                   json_extract_path_text(at.attribute_custom_value, 'functionality')
-                                                  when 'none' then 'nocontrol'
-                                                  when 'smart_thermostat~timer_control'
-                                                      then 'smartthermostat'
-                                                  when 'smart_thermostat~smart_app_control'
-                                                      then 'smartthermostat'
-                                                  when 'thermostat_only~thermostat_manual_control'
-                                                      then 'thermostatmanual'
-                                                  when 'thermostat_only~thermostat_set_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'thermostat_only~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_only~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_only~timer_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'timer_thermostat~thermostat_manual_control'
-                                                      then 'thermostatmanual'
-                                                  when 'timer_thermostat~thermostat_set_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'timer_thermostat~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_thermostat~timer_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'unknown' then 'unknown'
-                                                  else null end
-                                     else '' end           as heating_controls
-
-                          from ref_cdb_supply_contracts su
-                                   inner join ref_cdb_addresses addr on su.supply_address_id = addr.id
-                                   inner join ref_cdb_user_permissions up
-                                              on su.id = up.permissionable_id and permission_level = 0
-                                                  and permissionable_type ILIKE 'App%SupplyContract'
-                                   inner join ref_cdb_users u on u.id = up.user_id
-                                   left outer join ref_cdb_attributes at on (
-                                                                                    (at.entity_id = up.user_id AND at.entity_type ILIKE 'App%User')
-                                                                                    OR
-                                                                                    (at.entity_id = su.supply_address_id AND
-                                                                                     at.entity_type ILIKE 'App%Address')
-                                                                                )
-                              and at.effective_to is null
-
-                                   left outer join ref_cdb_attribute_types att
-                                                   on att.id = at.attribute_type_id and att.effective_to is null
-                                   left outer join ref_cdb_attribute_values av
-                                                   on av.attribute_type_id = at.attribute_type_id and
-                                                      at.attribute_value_id = av.id
-                                                       and at.attribute_value_id is not null
-                                   left outer join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
-                                   left outer join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
-                                   left outer join (select user_id, survey_id
-                                                    from ref_cdb_survey_response
-                                                    where survey_id = 1
-                                                    group by user_id, survey_id) sr on sr.user_id = up.user_id
-                          where (att.attribute_name in ('resident_ages',
-                                                        'heating_control_type',
-                                                        'temperature_preference',
-                                                        'heating_basis',
-                                                        'heating_type',
-                                                        'house_bedrooms',
-                                                        'house_type',
-                                                        'house_age',
-                                                        'heating_controls')
-                              or sr.user_id is null or att.attribute_name is null)
-                      ) l1
-                  group by user_id, account_id, supply_address_id, postcode) x
+            from (with current_attributes as (
+                select attr.entity_id,
+                       attr.entity_type,
+                       case
+                           when attr.entity_type ilike 'app%user' then entity_id
+                           else null end                                             as user_id,
+                       case
+                           when attr.entity_type ilike 'app%supplycontract' then entity_id
+                           else null end                                             as supply_contract_id,
+                       case
+                           when attr.entity_type ilike 'app%address' then entity_id
+                           else null end                                             as address_id,
+                       attr.attribute_type_id,
+                       attr_t.attribute_name,
+                       attr.attribute_value_id,
+                       coalesce(attr.attribute_custom_value, attr_v.attribute_value) as attribute_value
+                from ref_cdb_attributes attr
+                         left join ref_cdb_attribute_types attr_t on attr.attribute_type_id = attr_t.id
+                         left join ref_cdb_attribute_values attr_v on attr.attribute_value_id = attr_v.id and
+                                                                      attr.attribute_type_id = attr_v.attribute_type_id
+                where getdate() >= attr.effective_from
+                  and (attr.effective_to is null or attr.effective_to >= getdate())
+            )
+                  select u.id                                                     as user_id,
+                         sc.external_id                                           as account_id,
+                         addr.id                                                  as supply_address_id,
+                         addr.postcode                                            as postcode,
+                         fuel_types.fuel_type                                     as fuel_type,
+                         nvl(ca_base_temp.attribute_value::double precision, -99) as base_temp,
+                         20.0                                                     as default_base_temp,
+                         nvl(ca_heating_basis.attribute_value, '')                as heating_basis,
+                         nvl(ca_heating_controls.converted_value, ca_heating_control_type.attribute_value,
+                             '')                                                  as heating_control_type,
+                         nvl(ca_heating_source.attribute_value, '')               as heating_source,
+                         nvl(ca_house_bedrooms.attribute_value, '')               as house_bedrooms,
+                         nvl(ca_house_type.attribute_value, '')                   as house_type,
+                         nvl(ca_house_age.attribute_value, '')                    as house_age,
+                         nvl(ca_ages.attribute_value, '')                         as ages,
+                         tado_heating_summary(nvl(ca_ages.attribute_value, ''))   as family_category,
+                         case
+                             when ca_base_temp.attribute_value is null and
+                                  ca_heating_basis.attribute_value is null and
+                                  ca_heating_controls.converted_value is null and
+                                  ca_heating_source.attribute_value is null and
+                                  ca_house_bedrooms.attribute_value is null and
+                                  ca_house_type.attribute_value is null and
+                                  ca_house_age.attribute_value is null and
+                                  ca_ages.attribute_value is null
+                                 then null
+                             else u.id end                                        as sr_user_id
+                  from ref_cdb_supply_contracts sc
+                           inner join ref_cdb_user_permissions up
+                                      on sc.id = up.permissionable_id and
+                                         up.permissionable_type ilike 'app%supplycontract' and
+                                         up.permission_level = 0
+                           inner join ref_cdb_users u on up.user_id = u.id
+                           inner join ref_cdb_addresses addr on addr.id = sc.supply_address_id
+                           left join (select account_id, listagg(distinct meterpointtype) as fuel_type
+                                      from ref_meterpoints
+                                      group by account_id) fuel_types on fuel_types.account_id = sc.external_id
+                           left join current_attributes ca_base_temp
+                                     on ca_base_temp.attribute_name = 'temperature_preference' and
+                                        ca_base_temp.user_id = u.id
+                           left join current_attributes ca_heating_basis
+                                     on ca_heating_basis.attribute_name = 'heating_basis' and
+                                        ca_heating_basis.address_id = addr.id
+                           left join (select attribute_name,
+                                             address_id,
+                                             attribute_value,
+                                             case json_extract_path_text(attribute_value, 'type') + '~' +
+                                                  json_extract_path_text(attribute_value, 'functionality')
+                                                 when 'none~' then 'nocontrol'
+                                                 when 'smart_thermostat~timer_control'
+                                                     then 'smartthermostat'
+                                                 when 'smart_thermostat~smart_app_control'
+                                                     then 'smartthermostat'
+                                                 when 'thermostat_only~thermostat_manual_control'
+                                                     then 'thermostatmanual'
+                                                 when 'thermostat_only~thermostat_set_control'
+                                                     then 'thermostatautomatic'
+                                                 when 'thermostat_only~manual_control'
+                                                     then 'manually'
+                                                 when 'timer_only~manual_control'
+                                                     then 'manually'
+                                                 when 'timer_only~timer_control'
+                                                     then 'thermostatautomatic'
+                                                 when 'timer_thermostat~thermostat_manual_control'
+                                                     then 'thermostatmanual'
+                                                 when 'timer_thermostat~thermostat_set_control'
+                                                     then 'thermostatautomatic'
+                                                 when 'timer_thermostat~manual_control'
+                                                     then 'manually'
+                                                 when 'timer_thermostat~timer_control'
+                                                     then 'thermostatautomatic'
+                                                 when 'unknown~' then 'unknown'
+                                                 else null end as converted_value
+                                      from current_attributes
+                                      where attribute_name = 'heating_controls') ca_heating_controls
+                                     on ca_heating_controls.attribute_name = 'heating_controls' and
+                                        ca_heating_controls.address_id = addr.id
+                           left join current_attributes ca_heating_control_type
+                                     on ca_heating_control_type.attribute_name = 'heating_control_type' and
+                                        ca_heating_control_type.address_id = addr.id
+                           left join current_attributes ca_heating_source
+                                     on ca_heating_source.attribute_name = 'heating_type' and
+                                        ca_heating_source.address_id = addr.id
+                           left join current_attributes ca_house_bedrooms
+                                     on ca_house_bedrooms.attribute_name = 'house_bedrooms' and
+                                        ca_house_bedrooms.address_id = addr.id
+                           left join current_attributes ca_house_type
+                                     on ca_house_type.attribute_name = 'house_type' and
+                                        ca_house_type.address_id = addr.id
+                           left join current_attributes ca_house_age
+                                     on ca_house_age.attribute_name = 'house_age' and ca_house_age.address_id = addr.id
+                           left join current_attributes ca_ages
+                                     on ca_ages.attribute_name = 'resident_ages' and ca_ages.user_id = u.id) x
                      left outer join ref_consumption_accuracy_gas rcag
                                      on x.account_id = rcag.account_id -- moved to level 2 and removed group by
                      left outer join ref_tariff_history_gas_ur tf
