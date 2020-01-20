@@ -170,7 +170,7 @@ alter table temp_tado_diffs_identical
     owner to igloo;
 
 
-/*-- 5)
+-- 5)
 drop table if exists temp_tado_new;
 create table temp_tado_new as
 select *
@@ -183,7 +183,7 @@ set account_id = -1
 where account_id is null;
 update temp_tado_new
 set supply_address_id = -1
-where supply_address_id is null;*/
+where supply_address_id is null;
 
 
 /*create table temp_tado_20200117_morning as
