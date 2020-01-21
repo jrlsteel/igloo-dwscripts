@@ -228,9 +228,10 @@ from ref_meterpoints mp
                    on rma_location.metersattributes_attributename ilike 'Meter_Location' and
                       rma_location.meter_id = met.meter_id and
                       rma_location.account_id = met.account_id
-         left join ref_meters_attributes rma_mech on rma_mech.metersattributes_attributename = 'Gas_Meter_Mechanism' and
-                                                     rma_mech.meter_id = met.meter_id and
-                                                     rma_mech.account_id = met.account_id
+         left join ref_meters_attributes rma_mech
+                   on rma_mech.metersattributes_attributename in ('Gas_Meter_Mechanism', 'Meter_Mechanism_Code') and
+                      rma_mech.meter_id = met.meter_id and
+                      rma_mech.account_id = met.account_id
          left join (select account_id, meter_id, count(distinct register_id) as reg_count
                     from ref_registers
                     group by account_id, meter_id) num_reg on num_reg.meter_id = met.meter_id and
