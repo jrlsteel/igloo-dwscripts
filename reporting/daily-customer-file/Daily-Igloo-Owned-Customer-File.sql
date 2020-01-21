@@ -1,4 +1,4 @@
-create table temp_reporting_dcf as
+--create table temp_reporting_dcf as
 select all_ids.account_id                                                                   as account_id,
        elec_stats.start_date                                                                as Elec_SSD,
        gas_stats.start_date                                                                 as Gas_SSD,
@@ -525,8 +525,12 @@ from (select distinct account_id
                     group by bill_dates.acc_id
                     order by bill_dates.acc_id) billing_performance on billing_performance.acc_id = all_ids.account_id
 -- occupier accounts
-         left join ref_occupier_accounts occ_acc_current on occ_acc_current.account_id = all_ids.account_id
-         left join ref_occupier_accounts_archive occ_acc_hist on occ_acc_hist.account_id = all_ids.account_id
+         left join (select *, row_number() over (partition by account_id order by etl_change desc, cot_date) as rn
+                    from ref_occupier_accounts) occ_acc_current
+                   on occ_acc_current.account_id = all_ids.account_id and occ_acc_current.rn = 1
+         left join (select *, row_number() over (partition by account_id order by etl_change desc, cot_date) as rn
+                    from ref_occupier_accounts_archive) occ_acc_hist
+                   on occ_acc_hist.account_id = all_ids.account_id and occ_acc_hist.rn = 1
 where all_ids.account_id not in --exclude known erroneous accounts
       (29678, 36991, 38044, 38114, 38601, 38602, 38603, 38604, 38605, 38606,
        38607, 38741, 38742,
