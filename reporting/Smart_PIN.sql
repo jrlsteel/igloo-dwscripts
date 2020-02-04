@@ -1,3 +1,8 @@
+/*drop table if exists temp_pin_old;
+create table temp_pin_old as*/
+/*drop table if exists temp_pin_update;
+create table temp_pin_update as
+*/
 select UPDATEDEVICECONFIG,
        DEVICETYPE,
        MPXN,
@@ -33,35 +38,26 @@ from (select distinct max(tr.sourcedate::timestamp)
                       rmp.meterpointnumber                                         as MPXN,
                       null                                                         as EXPORTMPAN,
                       null                                                         as SECONDARYIMPORTMPAN,
-
-
-                       CASE rma_gsp.attributes_attributevalue
-                           WHEN '_A' THEN '10'
-                           WHEN '_B' THEN '11'
-                           WHEN '_C' THEN '12'
-                           WHEN '_D' THEN '13'
-                           WHEN '_E' THEN '14'
-                           WHEN '_F' THEN '15'
-                           WHEN '_G' THEN '16'
-                           WHEN '_P' THEN '17'
-                           WHEN '_N' THEN '18'
-                           WHEN '_J' THEN '19'
-                           WHEN '_H' THEN '20'
-                           WHEN '_K' THEN '21'
-                           WHEN '_L' THEN '22'
-                           WHEN '_M' THEN '23'
-                      END                                                          as gsp_region_code,
-
-                      CASE WHEN LEFT(rmp.meterpointnumber, 2) = '24' THEN gsp_region_code
-                           else region_code
-                      END                                                          as region_code_mpan,
-
-
+                      CASE account_gsp.gsp
+                          WHEN '_A' THEN '10'
+                          WHEN '_B' THEN '11'
+                          WHEN '_C' THEN '12'
+                          WHEN '_D' THEN '13'
+                          WHEN '_E' THEN '14'
+                          WHEN '_F' THEN '15'
+                          WHEN '_G' THEN '16'
+                          WHEN '_P' THEN '17'
+                          WHEN '_N' THEN '18'
+                          WHEN '_J' THEN '19'
+                          WHEN '_H' THEN '20'
+                          WHEN '_K' THEN '21'
+                          WHEN '_L' THEN '22'
+                          WHEN '_M' THEN '23'
+                          END                                                      as region_code,
                       case DEVICETYPE
-                          when 0 then 'ELECPION' || region_code_mpan
-                          when 1 then 'GASPION' || region_code_mpan
+                          when 0 then 'ELECPION' || region_code
+                          when 1 then 'GASPION' || region_code
                           else null end                                            as TARIFF,
-
                       case DEVICETYPE
                           when 0 then 'ACCELERO_DEFAULT_ESME_001'
                           when 1 then 'ACCELERO_DEFAULT_GSME_001'
@@ -84,7 +80,8 @@ from (select distinct max(tr.sourcedate::timestamp)
                inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
                           on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
                inner join ref_cdb_user_permissions up
-                          on up.user_id = ba.user_id::int and up.permissionable_type ilike 'App%SupplyContract'
+                          on up.user_id = ba.user_id::int and up.permissionable_type ilike 'App%SupplyContract' and
+                             permission_level = 0
                inner join ref_cdb_supply_contracts sc on sc.id = up.permissionable_id
                inner join ref_cdb_registrations r
                           on r.supply_address_id = ba.address_id::int and sc.registration_id = r.id
@@ -98,14 +95,88 @@ from (select distinct max(tr.sourcedate::timestamp)
                          on tr.account_id = sc.external_id and tr.method = 'Direct Debit' and
                             tr.transactiontype = 'PAYMENT' and tr.sourcedate <= ba.start::timestamp
                left join ref_cdb_attributes consent_id
-                         on consent_id.attribute_type_id = 23 and consent_id.entity_id = sc.id
+                         on consent_id.attribute_type_id = 23 and consent_id.entity_id = sc.id and
+                            consent_id.effective_to is null
                left join ref_cdb_attribute_values consent_type
                          on consent_type.attribute_type_id = 23 and consent_type.id = consent_id.attribute_value_id
-
-               ---- Added: T.A -- DMRE-943
-               inner join ref_meterpoints_attributes rma_gsp
-                          on rmp.account_id = rma_gsp.account_id
-                          and rmp.meter_point_id = rma_gsp.meter_point_id
-                          and rma_gsp.attributes_attributename = 'GSP'
+               left join (select account_id, max(attributes_attributevalue) as gsp
+                          from ref_meterpoints_attributes
+                          where attributes_attributename = 'GSP'
+                          group by account_id) account_gsp
+                         on rmp.account_id = account_gsp.account_id
 
       where left(ba.status, 9) != 'cancelled' and $__timeFilter(ba.created_at)) calc
+
+
+---- TESTING #####################
+
+select nvl(tpo.mpxn, tpu.mpxn)                               as mpxn,
+       nvl(tpo.BILLINGDATALOGSTART, tpu.BILLINGDATALOGSTART) as billing_start,
+       tpo.tariff,
+       tpu.TARIFF
+from temp_pin_old tpo
+         full join temp_pin_update tpu on tpo.mpxn = tpu.MPXN and tpo.billingdatalogstart = tpu.BILLINGDATALOGSTART
+where tpo.tariff != tpu.TARIFF or tpo.tariff is null or tpu.TARIFF is null
+
+select mpxn, count(*)
+from temp_pin_old
+group by mpxn
+having count(*) > 1
+select *
+from temp_pin_old
+where MPXN in (
+               3930282200, 2000051431187, /*1900013017727, */8834428604, 2000007794886, /*609422003, */2000027938150,
+               2000022888995, 7421149901
+    )
+order by MPXN
+
+
+select entity_id,
+       count(*)                             as total,
+       sum((attribute_value_id = 132)::int) as _132,
+       sum((attribute_value_id = 133)::int) as _133,
+       sum((attribute_value_id = 134)::int) as _134
+from ref_cdb_attributes
+where attribute_type_id = 23
+  and effective_to is null
+group by entity_id
+having count(*) > 1
+
+select entity_id,
+       count(*)
+from ref_cdb_attributes
+where attribute_type_id = 23
+  and effective_to is null
+group by entity_id
+having count(*) > 1
+
+select distinct attribute_value_id
+from ref_cdb_attributes
+where attribute_type_id = 23
+
+select *
+from ref_cdb_attributes
+where attribute_type_id = 23
+  and entity_id = 22343
+
+select address_id,
+       count(*)
+from aws_s3_stage2_extracts.stage2_cdbbookingappointments ba
+         inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
+                    on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
+where left(ba.status, 9) != 'cancelled'
+group by address_id
+having count(*) > 1
+
+select *
+from aws_s3_stage2_extracts.stage2_cdbbookingappointments
+where address_id in (
+                     868, 2014, 26646, 5699
+    )
+
+
+mpxn
+2000053568965
+2000053727837
+2000054367826
+2000055213408
