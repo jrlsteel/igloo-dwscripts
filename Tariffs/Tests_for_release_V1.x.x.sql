@@ -77,3 +77,22 @@ having elec_reg > elec_tariffs
     or gas_tariffs > 1
     or elec_tariffs > 1
 order by account_id;
+
+/*
+ 5) Check number of error codes is reasonable
+ Expectation:
+ error_code	num_records	num_accounts
+Live_Valid	154633	89719
+Final_Valid	21834	12689
+Pending_Valid	2575	2072
+FINAL_MISMATCH	704	426
+LIVE_ENSEK_MISSING	46	34
+FINAL_ENSEK_MISSING	15	9
+LIVE_MISMATCH	6	4
+PENDING_ENSEK_MISSING	5	5
+FINAL_IGLOO_MISSING	2	1
+ */
+select error_code, count(*) as num_records, count(distinct account_id) as num_accounts
+from vw_tariff_checks
+group by error_code
+order by count(*) desc

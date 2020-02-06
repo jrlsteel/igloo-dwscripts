@@ -142,7 +142,7 @@ where error_code in ('LIVE_ENSEK_MISSING', 'LIVE_MISMATCH',
 
 
 select error_code, count(*) as num_records, count(distinct account_id) as num_accounts
-from vw_tariff_checks
+from temp_tariffs_diffs
 group by error_code
 order by count(*) desc
 
