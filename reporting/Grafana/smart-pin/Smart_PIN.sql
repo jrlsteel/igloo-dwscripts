@@ -3,6 +3,47 @@ create table temp_pin_old as*/
 /*drop table if exists temp_pin_update;
 create table temp_pin_update as
 */
+with bookings as (
+    select sc.external_id as account_id,
+           rmp.meterpointnumber,
+           sc.id          as supply_contract_id,
+           ba.start       as booking_date
+    from aws_s3_stage2_extracts.stage2_cdbbookingappointments ba
+             inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
+                        on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
+             inner join ref_cdb_user_permissions up
+                        on up.user_id = ba.user_id::int and
+                           up.permissionable_type ilike 'App%SupplyContract' and
+                           permission_level = 0
+             inner join ref_cdb_supply_contracts sc on sc.id = up.permissionable_id
+             inner join ref_cdb_registrations r
+                        on r.supply_address_id = ba.address_id::int and sc.registration_id = r.id
+             inner join ref_meterpoints rmp
+                        on rmp.account_id = sc.external_id and
+                           ba.created_at::timestamp between rmp.supplystartdate and -- booking appointment created while account was live
+                               nvl(least(rmp.supplyenddate, rmp.associationenddate), getdate() + 1)
+             inner join ref_meters rm on rm.account_id = rmp.account_id and
+                                         rm.meter_point_id = rmp.meter_point_id and
+                                         rm.removeddate is null
+    where left(ba.status, 9) != 'cancelled'
+      and $__timeFilter(ba.created_at)
+      and 'S2_Installs' in ($pin_type)
+    union
+    select sc.external_id as account_id,
+        rmp.meterpointnumber,
+        sc.id as supply_contract_id,
+        trunc(getdate()) as booking_date
+    from ref_smets1_migration_meterpoints s1_mp
+        inner join ref_meterpoints rmp
+    on rmp.meterpointnumber = s1_mp.mpxn and
+        getdate() between rmp.supplystartdate and -- current meterpoint entry
+        nvl(least(rmp.supplyenddate, rmp.associationenddate), getdate() + 1)
+        inner join ref_meters rm on rm.account_id = rmp.account_id and
+        rm.meter_point_id = rmp.meter_point_id and
+        rm.removeddate is null
+        inner join ref_cdb_supply_contracts sc on sc.external_id = rmp.account_id
+    where 'S1_Migrations' in ($pin_type) and s1_mp.date_added in ($batch_date)
+)
 select UPDATEDEVICECONFIG,
        DEVICETYPE,
        MPXN,
@@ -23,20 +64,19 @@ select UPDATEDEVICECONFIG,
        null                                                          as PAN,
        null                                                          as COMPANYNAME,
        null                                                          as COMPANYCONTRACTID,
-       null                                                          as LDZ,
+       LDZ                                                           as LDZ,
        null                                                          as TOPUPAMOUNT,
        null                                                          as ACTIVATEEMERGENCYCREDIT,
        null                                                          as PREPAYDAILYREADLOG,
-       null                                                          as PREPAYDAILYREADLOGFREQUENCY,
-       LDZ                                                           as LDZ
+       null                                                          as PREPAYDAILYREADLOGFREQUENCY
 from (select distinct max(tr.sourcedate::timestamp)
                       over (partition by tr.account_id::int)                       as dd_date,
-                      trunc(ba.start::timestamp)                                   as install_date,
-                      left(max(rmp.meterpointnumber) over (partition by sc.external_id),
+                      trunc(b.booking_date::timestamp)                             as install_date,
+                      left(max(b.meterpointnumber) over (partition by b.account_id),
                            2)                                                      as region_code,
                       1                                                            as UPDATEDEVICECONFIG,
-                      case when len(rmp.meterpointnumber) > 10 then 0 else 1 end   as DEVICETYPE,
-                      rmp.meterpointnumber                                         as MPXN,
+                      case when len(b.meterpointnumber) > 10 then 0 else 1 end     as DEVICETYPE,
+                      b.meterpointnumber                                           as MPXN,
                       null                                                         as EXPORTMPAN,
                       null                                                         as SECONDARYIMPORTMPAN,
                       CASE account_gsp.gsp
@@ -78,26 +118,12 @@ from (select distinct max(tr.sourcedate::timestamp)
                                      else 1 end)                                   as BILLINGDATALOGSTART,
                       'Monthly'                                                    as BILLINGDATALOGFREQUENCY,
                       nvl(dcf.ldz, most_common_ldz.ldz, 'SO')                      as LDZ
-      from aws_s3_stage2_extracts.stage2_cdbbookingappointments ba
-               inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
-                          on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
-               inner join ref_cdb_user_permissions up
-                          on up.user_id = ba.user_id::int and up.permissionable_type ilike 'App%SupplyContract' and
-                             permission_level = 0
-               inner join ref_cdb_supply_contracts sc on sc.id = up.permissionable_id
-               inner join ref_cdb_registrations r
-                          on r.supply_address_id = ba.address_id::int and sc.registration_id = r.id
-               inner join ref_meterpoints rmp
-                          on rmp.account_id = sc.external_id and
-                             ba.created_at::timestamp between rmp.supplystartdate and -- booking appointment created while account was live
-                                 nvl(greatest(rmp.supplyenddate, rmp.associationenddate), getdate() + 1)
-               inner join ref_meters rm on rm.account_id = rmp.account_id and rm.meter_point_id = rmp.meter_point_id and
-                                           rm.removeddate is null
+      from bookings b
                left join ref_account_transactions tr
-                         on tr.account_id = sc.external_id and tr.method = 'Direct Debit' and
-                            tr.transactiontype = 'PAYMENT' and tr.sourcedate <= ba.start::timestamp
+                         on tr.account_id = b.account_id and tr.method = 'Direct Debit' and
+                            tr.transactiontype = 'PAYMENT' and tr.sourcedate <= b.booking_date::timestamp
                left join ref_cdb_attributes consent_id
-                         on consent_id.attribute_type_id = 23 and consent_id.entity_id = sc.id and
+                         on consent_id.attribute_type_id = 23 and consent_id.entity_id = b.supply_contract_id and
                             consent_id.effective_to is null
                left join ref_cdb_attribute_values consent_type
                          on consent_type.attribute_type_id = 23 and consent_type.id = consent_id.attribute_value_id
@@ -105,8 +131,8 @@ from (select distinct max(tr.sourcedate::timestamp)
                           from ref_meterpoints_attributes
                           where attributes_attributename = 'GSP'
                           group by account_id) account_gsp
-                         on rmp.account_id = account_gsp.account_id
-               left join ref_calculated_daily_customer_file dcf on sc.external_id = dcf.account_id
+                         on b.account_id = account_gsp.account_id
+               left join ref_calculated_daily_customer_file dcf on b.account_id = dcf.account_id
                left join (select outcode, ldz
                           from (select outcode,
                                        ldz,
@@ -117,8 +143,6 @@ from (select distinct max(tr.sourcedate::timestamp)
                                       group by ldz, outcode) ldz_freqs
                                ) ranked_ldz_per_outcode
                           where rn = 1) most_common_ldz on dcf.outcode = most_common_ldz.outcode
-
-      where left(ba.status, 9) != 'cancelled' and $__timeFilter(ba.created_at)) calc
+     ) calc
 
 ---- TESTING #####################
-
