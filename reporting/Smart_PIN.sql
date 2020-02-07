@@ -27,7 +27,8 @@ select UPDATEDEVICECONFIG,
        null                                                          as TOPUPAMOUNT,
        null                                                          as ACTIVATEEMERGENCYCREDIT,
        null                                                          as PREPAYDAILYREADLOG,
-       null                                                          as PREPAYDAILYREADLOGFREQUENCY
+       null                                                          as PREPAYDAILYREADLOGFREQUENCY,
+       LDZ                                                           as LDZ
 from (select distinct max(tr.sourcedate::timestamp)
                       over (partition by tr.account_id::int)                       as dd_date,
                       trunc(ba.start::timestamp)                                   as install_date,
@@ -75,7 +76,8 @@ from (select distinct max(tr.sourcedate::timestamp)
                                  case
                                      when date_part(days, dd_date) > date_part(days, install_date) then 0
                                      else 1 end)                                   as BILLINGDATALOGSTART,
-                      'Monthly'                                                    as BILLINGDATALOGFREQUENCY
+                      'Monthly'                                                    as BILLINGDATALOGFREQUENCY,
+                      nvl(dcf.ldz, most_common_ldz.ldz, 'SO')                      as LDZ
       from aws_s3_stage2_extracts.stage2_cdbbookingappointments ba
                inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
                           on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
@@ -104,79 +106,19 @@ from (select distinct max(tr.sourcedate::timestamp)
                           where attributes_attributename = 'GSP'
                           group by account_id) account_gsp
                          on rmp.account_id = account_gsp.account_id
+               left join ref_calculated_daily_customer_file dcf on sc.external_id = dcf.account_id
+               left join (select outcode, ldz
+                          from (select outcode,
+                                       ldz,
+                                       row_number() over (partition by outcode order by num_in_outcode desc) as rn
+                                from (select outcode, ldz, count(*) as num_in_outcode
+                                      from ref_calculated_daily_customer_file
+                                      where ldz is not null
+                                      group by ldz, outcode) ldz_freqs
+                               ) ranked_ldz_per_outcode
+                          where rn = 1) most_common_ldz on dcf.outcode = most_common_ldz.outcode
 
       where left(ba.status, 9) != 'cancelled' and $__timeFilter(ba.created_at)) calc
 
-
 ---- TESTING #####################
 
-select nvl(tpo.mpxn, tpu.mpxn)                               as mpxn,
-       nvl(tpo.BILLINGDATALOGSTART, tpu.BILLINGDATALOGSTART) as billing_start,
-       tpo.tariff,
-       tpu.TARIFF
-from temp_pin_old tpo
-         full join temp_pin_update tpu on tpo.mpxn = tpu.MPXN and tpo.billingdatalogstart = tpu.BILLINGDATALOGSTART
-where tpo.tariff != tpu.TARIFF or tpo.tariff is null or tpu.TARIFF is null
-
-select mpxn, count(*)
-from temp_pin_old
-group by mpxn
-having count(*) > 1
-select *
-from temp_pin_old
-where MPXN in (
-               3930282200, 2000051431187, /*1900013017727, */8834428604, 2000007794886, /*609422003, */2000027938150,
-               2000022888995, 7421149901
-    )
-order by MPXN
-
-
-select entity_id,
-       count(*)                             as total,
-       sum((attribute_value_id = 132)::int) as _132,
-       sum((attribute_value_id = 133)::int) as _133,
-       sum((attribute_value_id = 134)::int) as _134
-from ref_cdb_attributes
-where attribute_type_id = 23
-  and effective_to is null
-group by entity_id
-having count(*) > 1
-
-select entity_id,
-       count(*)
-from ref_cdb_attributes
-where attribute_type_id = 23
-  and effective_to is null
-group by entity_id
-having count(*) > 1
-
-select distinct attribute_value_id
-from ref_cdb_attributes
-where attribute_type_id = 23
-
-select *
-from ref_cdb_attributes
-where attribute_type_id = 23
-  and entity_id = 22343
-
-select address_id,
-       count(*)
-from aws_s3_stage2_extracts.stage2_cdbbookingappointments ba
-         inner join aws_s3_stage2_extracts.stage2_cdbbookingtypes bt
-                    on ba.booking_type_id = bt.id and bt.slug = 'smart-install'
-where left(ba.status, 9) != 'cancelled'
-group by address_id
-having count(*) > 1
-
-select *
-from aws_s3_stage2_extracts.stage2_cdbbookingappointments
-where address_id in (
-                     868, 2014, 26646, 5699
-    )
-
-
-mpxn
-2000053568965
-2000053727837
-2000054367826
-2000055213408
