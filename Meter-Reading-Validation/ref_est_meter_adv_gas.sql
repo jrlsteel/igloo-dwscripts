@@ -1,4 +1,4 @@
---insert into ref_estimated_advance_gas
+--create table temp_estimated_advance_gas as
 select x1.account_id,
        x1.register_id,
        x1.last_reading_date,
@@ -20,67 +20,67 @@ from (select account_id,
              last_reading_date,
              last_reading_value,
              days_since_last_read,
-             round(coalesce(aq, 0), 0)                                        as aq,
-             round(coalesce(igl_ind_aq, 0), 0)                                as igl_ind_aq,
-             round(coalesce(ind_aq, 0), 0)                                    as ind_aq,
-             getdate()                                                        as effective_for,
-             convert_kwh_to_cubic((aq * cwaalp) / 365, avg_cv, imp_indicator) as igl_estimated_advance,
-             convert_kwh_to_cubic((ind_aq * (cast(days_since_last_read as double precision) / 365)), avg_cv,
-                                  imp_indicator)                              as ind_estimated_advance
-      from (select su.external_id                                               as account_id,
+             round(coalesce(aq, 0), 0)         as aq,
+             round(coalesce(igl_ind_aq, 0), 0) as igl_ind_aq,
+             round(coalesce(ind_aq, 0), 0)     as ind_aq,
+             getdate()                         as effective_for,
+             case
+                 when last_reading_date is not null then
+                     convert_kwh_to_cubic(aq * nvl(cwaalp, 0) / 365, avg_cv, imp_indicator)
+                 end                           as igl_estimated_advance,
+             case
+                 when last_reading_date is not null then
+                     convert_kwh_to_cubic(ind_aq * nvl(cwaalp, 0) / 365, avg_cv, imp_indicator)
+                 end                           as ind_estimated_advance
+      from (select mp.account_id                                                     as account_id,
                    r.register_id,
-                   reads.meterreadingdatetime                                   as last_reading_date,
-                   reads.readingvalue                                           as last_reading_value,
-                   datediff(days, reads.meterreadingdatetime, trunc(getdate())) as days_since_last_read,
-                   greatest(mp.supplystartdate, associationstartdate)           as startdate,
-                   least(mp.supplyenddate, associationenddate)                  as enddate,
-                   coalesce(aq.igloo_aq, 0)                                     as igl_ind_aq,
-                   coalesce(r.registers_eacaq, 0)                               as ind_aq,
-                   case
-                       when coalesce(aq.igloo_aq, 0) != 0 then aq.igloo_aq
-                       else case
-                                when coalesce(r.registers_eacaq, 0) != 0 then r.registers_eacaq
-                                else 0 end end                                  as aq,
-                   rma_imp.attributes_attributevalue                            as imp_indicator,
-                   coalesce((select sum((1 + ((waalp.value / 2) * (waalp.variance))) *
-                                        (waalp.forecastdocumentation)) --TODO: if/when the weather data is corrected, remove the /2
-                             from ref_alp_igloo_daf_wcf waalp
-                             where waalp.ldz = trim(rma.attributes_attributevalue)
-                               and waalp.applicable_for >= reads.meterreadingdatetime
-                               and waalp.applicable_for < current_date), 0)     as cwaalp,
-                   coalesce((select avg(cv.value / 2)
+                   reads.meterreadingdatetime                                        as last_reading_date,
+                   reads.readingvalue                                                as last_reading_value,
+                   datediff(days, reads.meterreadingdatetime, trunc(getdate()))      as days_since_last_read,
+                   coalesce(aq.igloo_aq, 0)                                          as igl_ind_aq,
+                   coalesce(r.registers_eacaq, 0)                                    as ind_aq,
+                   coalesce(nullif(aq.igloo_aq, 0), nullif(r.registers_eacaq, 0), 0) as aq,
+                   rma_imp.attributes_attributevalue                                 as imp_indicator,
+                   (select sum((1 + (nvl(waalp.value, 0) * 0.5 * waalp.variance)) * waalp.forecastdocumentation)
+                           --TODO: if/when the weather data is corrected, remove the /2
+                    from ref_alp_igloo_daf_wcf waalp
+                    where waalp.ldz = trim(rma.attributes_attributevalue)
+                      and waalp.date >= reads.meterreadingdatetime
+                      and waalp.date < getdate() + 1)                                as cwaalp,
+                   coalesce((select nvl(avg(cv.value / 2), 39.417)
                              from ref_alp_igloo_cv cv
                              where cv.ldz = trim(rma.attributes_attributevalue)
                                and cv.applicable_for >= reads.meterreadingdatetime
-                               and cv.applicable_for < current_date), 0)        as avg_cv
-            from ref_cdb_supply_contracts su
-                     inner join ref_meterpoints mp on mp.account_id = su.external_id and mp.meterpointtype = 'G' and
-                                                      (least(mp.supplyenddate, mp.associationenddate) is null or
-                                                       least(mp.supplyenddate, mp.associationenddate) >= current_date)
-                     left outer join ref_meterpoints_attributes rma
-                                     on rma.account_id = su.external_id and rma.meter_point_id = mp.meter_point_id and
-                                        rma.attributes_attributename = 'LDZ'
-                     left outer join ref_meterpoints_attributes rma_imp
-                                     on rma_imp.account_id = su.external_id and
-                                        rma_imp.meter_point_id = mp.meter_point_id and
-                                        rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
+                               and cv.applicable_for < getdate() + 1), 0)            as avg_cv
+            from ref_meterpoints mp
                      inner join ref_meters m
-                                on m.account_id = su.external_id and m.meter_point_id = mp.meter_point_id and
+                                on m.account_id = mp.account_id and m.meter_point_id = mp.meter_point_id and
                                    m.removeddate is null
-                     inner join ref_registers r on r.account_id = su.external_id and r.meter_id = m.meter_id
-                     inner join (select *
-                                 from (select account_id,
-                                              register_id,
-                                              meterreadingdatetime,
-                                              readingvalue,
-                                              row_number()
-                                              over (partition by ri.account_id, register_id order by meterreadingdatetime desc) rownum
-                                       from ref_readings_internal_valid ri
-                                       order by ri.meterreadingdatetime desc) r1
-                                 where r1.rownum = 1) reads
-                                on reads.account_id = su.external_id and reads.register_id = r.register_id
+                     inner join ref_registers r on r.account_id = mp.account_id and r.meter_id = m.meter_id and
+                                                   r.registers_tprperioddescription is not null
+                     left join ref_meterpoints_attributes rma
+                               on rma.account_id = mp.account_id and rma.meter_point_id = mp.meter_point_id and
+                                  rma.attributes_attributename = 'LDZ'
+                     left join ref_meterpoints_attributes rma_imp
+                               on rma_imp.account_id = mp.account_id and
+                                  rma_imp.meter_point_id = mp.meter_point_id and
+                                  rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
+
+                     left join (select *
+                                from (select account_id,
+                                             register_id,
+                                             meterreadingdatetime,
+                                             readingvalue,
+                                             row_number()
+                                             over (partition by ri.account_id, register_id order by meterreadingdatetime desc) rownum
+                                      from ref_readings_internal_valid ri
+                                      order by ri.meterreadingdatetime desc) r1
+                                where r1.rownum = 1) reads
+                               on reads.account_id = mp.account_id and reads.register_id = r.register_id
                      left outer join ref_calculated_aq aq
-                                     on aq.account_id = su.external_id and aq.register_id = r.register_id) x
+                                     on aq.account_id = mp.account_id and aq.register_id = r.register_id
+            where mp.meterpointtype = 'G'
+              and (nvl(least(mp.supplyenddate, mp.associationenddate), getdate() + 1) >= getdate())) x
       order by x.account_id, register_id) x1
          left join ref_stg_tolerances rst_inner
                    on
@@ -104,6 +104,8 @@ from (select account_id,
                       registersattributes_attributename = 'No_Of_Digits'
 order by x1.account_id, x1.register_id;
 
+
+-- #################################
 
 select count(*)
 from ref_cdb_supply_contracts su
@@ -379,3 +381,10 @@ $$
     return value_kwh
 
 $$;
+
+select *
+from ref_readings_internal
+where account_id = 1830
+
+select distinct meterreadingtypeuid
+from ref_readings_internal
