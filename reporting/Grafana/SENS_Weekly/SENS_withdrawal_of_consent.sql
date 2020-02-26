@@ -27,7 +27,7 @@ from aws_s3_stage2_extracts.stage2_cdbmeetsprojectdata mpd
                                              nvl(least(supplyenddate, associationenddate), getdate() + 1)
          left join ref_calculated_daily_customer_file dcf on sc.external_id = dcf.account_id
 where consentwithdrawaldate is not null
-group by mpd.id, mpd.opted_out, addr.sub_building_name_number, addr.building_name_number, addr.dependent_thoroughfare,
+group by mpd.id, consentwithdrawaldate, addr.sub_building_name_number, addr.building_name_number, addr.dependent_thoroughfare,
          addr.thoroughfare, addr.double_dependent_locality, addr.dependent_locality, addr.post_town, addr.county,
          addr.postcode, u.first_name, u.last_name, addr.uprn
 order by ext_participant_id

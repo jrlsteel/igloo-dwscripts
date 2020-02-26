@@ -32,6 +32,6 @@ from aws_s3_stage2_extracts.stage2_cdbmeetsprojectdata mpd
                                              nvl(least(supplyenddate, associationenddate), getdate() + 1)
 group by mpd.id, addr.sub_building_name_number, addr.building_name_number, addr.dependent_thoroughfare,
          addr.thoroughfare, addr.double_dependent_locality, addr.dependent_locality, addr.post_town, addr.county,
-         addr.postcode, u.first_name, u.last_name, addr.uprn, consent_provided, mpd.opted_in, mpd.opted_out,
+         addr.postcode, u.first_name, u.last_name, addr.uprn, consent_provided, mpd.opted_in, consent_end_date,
          mpd.move_in_date, mpd."group"
 order by ext_participant_id
