@@ -180,6 +180,12 @@ select mp.meterpointnumber                                                      
        read_summaries.latest_valid_actual,
        read_summaries.latest_invalid_actual,
        lia_type.status                                                          as latest_invalid_actual_type,
+       read_summaries.num_valid_smart_reads,
+       read_summaries.num_inv_smart_reads,
+       read_summaries.first_valid_smart,
+       read_summaries.first_invalid_smart,
+       read_summaries.latest_valid_smart,
+       read_summaries.latest_invalid_smart,
        getdate()                                                                as etlchange
 from ref_meterpoints mp
          left join ref_meters met on met.meter_point_id = mp.meter_point_id and met.account_id = mp.account_id
@@ -299,7 +305,21 @@ from ref_meterpoints mp
                            min(case when valid_actual then reading_date else null end)   as first_valid_actual,
                            min(case when invalid_actual then reading_date else null end) as first_invalid_actual,
                            max(case when valid_actual then reading_date else null end)   as latest_valid_actual,
-                           max(case when invalid_actual then reading_date else null end) as latest_invalid_actual
+                           max(case when invalid_actual then reading_date else null end) as latest_invalid_actual,
+                           sum((valid_actual and source = 'SMART')::int)                 as num_valid_smart_reads,
+                           sum((invalid_actual and source = 'SMART')::int)               as num_inv_smart_reads,
+                           min(case
+                                   when (valid_actual and source = 'SMART') then reading_date
+                                   else null end)                                        as first_valid_smart,
+                           min(case
+                                   when (invalid_actual and source = 'SMART') then reading_date
+                                   else null end)                                        as first_invalid_smart,
+                           max(case
+                                   when (valid_actual and source = 'SMART') then reading_date
+                                   else null end)                                        as latest_valid_smart,
+                           max(case
+                                   when (invalid_actual and source = 'SMART') then reading_date
+                                   else null end)                                        as latest_invalid_smart
                     from readings
                     group by account_id, meter_point_id, meter_id) read_summaries
                    on mp.account_id = read_summaries.account_id and
