@@ -1,6 +1,10 @@
 -- drop table temp_mr_dev;
 -- create table temp_mr_dev as
 
+create table ref_calculated_metering_report_2 as
+select *
+from ref_calculated_metering_report;
+
 truncate table ref_calculated_metering_report;
 
 insert into ref_calculated_metering_report
@@ -66,7 +70,7 @@ with readings as (select rmp.account_id,
                                 max(attributes_effectivefromdate)                as attributes_effectivefromdate,
                                 min(attributes_effectivetodate)                  as attributes_effectivetodate
                          from ref_meterpoints_attributes
-                         where attributes_effectivefromdate <= getdate()
+                         where (attributes_effectivefromdate is null or attributes_effectivefromdate <= getdate())
                            and (attributes_effectivetodate is null or attributes_effectivetodate > getdate())
                          group by account_id, meter_point_id, attributes_attributename),
      current_meters_attr as (select account_id,
@@ -77,141 +81,143 @@ with readings as (select rmp.account_id,
                                     count(*)                                               as num_records
                              from ref_meters_attributes
                              group by account_id, meter_point_id, meter_id, metersattributes_attributename)
-select mp.meterpointnumber                                                             as MPR,
-       met.meterserialnumber                                                           as MSN,
-       mp.account_id                                                                  as Account_ID,
-       mp.meterpointtype                                                               as fuel_type,
-       mp.supplystartdate                                                              as meterpoint_SSD,
-       mp.supplyenddate                                                                as meterpoint_SED,
-       udf_meterpoint_status(mp.supplystartdate, mp.supplyenddate)                     as meterpoint_status,
-       greatest(mp.supplystartdate, mp.associationstartdate)                           as acc_mp_SSD,
-       least(mp.supplyenddate, mp.associationenddate)                                  as acc_mp_SED,
-       udf_meterpoint_status(acc_mp_SSD, acc_mp_SED)                                   as acc_mp_status,
-       rma_status.metersattributes_attributevalue                                      as meter_status, -- only present in around half of cases
-       met.installeddate                                                               as meter_install_date,
-       met.removeddate                                                                 as meter_removed_date,
-       rma_type.metersattributes_attributevalue                                        as meter_type,
-       rma_location.metersattributes_attributevalue                                    as meter_location,
-       nvl(rma_mech_gmm.metersattributes_attributevalue,
-           rma_mech_mmc.metersattributes_attributevalue)                               as meter_mechanism,
-       num_reg.reg_count                                                               as num_registers,
-       nvl(rma_digits_gas.attributes_attributevalue,
-           rma_digits_elec.attributes_attributevalue)                                  as num_dials,
-       rma_ssc.attributes_attributevalue                                               as SSC,
-       nvl(rma_mop.attributes_attributevalue, rma_mam.attributes_attributevalue)       as MOP_MAM,
-       nvl(rma_mop.attributes_effectivefromdate, rma_mam.attributes_effectivefromdate) as MOP_MAM_effective_date,
-       old_mopmams.old_mopmams                                                         as old_MOP_MAM,
-       nvl(rma_osmop.attributes_attributevalue, rma_osmam.attributes_attributevalue)   as old_supplier_MOP_MAM,
-       case
-           when met_repl.meter_id is not null then 'Yes'
-           when met.removeddate is not null and met.removeddate < getdate() then 'Removed'
-           else 'No'
-           end                                                                         as MEX_occurred,
-       met_repl.installeddate                                                          as MEX_date,
+select distinct mp.meterpointnumber                                                             as MPR,
+                met.meterserialnumber                                                           as MSN,
+                mp.account_id                                                                   as Account_ID,
+                mp.meterpointtype                                                               as fuel_type,
+                mp.supplystartdate                                                              as meterpoint_SSD,
+                mp.supplyenddate                                                                as meterpoint_SED,
+                udf_meterpoint_status(mp.supplystartdate, mp.supplyenddate)                     as meterpoint_status,
+                greatest(mp.supplystartdate, mp.associationstartdate)                           as acc_mp_SSD,
+                least(mp.supplyenddate, mp.associationenddate)                                  as acc_mp_SED,
+                udf_meterpoint_status(acc_mp_SSD, acc_mp_SED)                                   as acc_mp_status,
+                rma_status.metersattributes_attributevalue                                      as meter_status, -- only present in around half of cases
+                met.installeddate                                                               as meter_install_date,
+                met.removeddate                                                                 as meter_removed_date,
+                rma_type.metersattributes_attributevalue                                        as meter_type,
+                rma_location.metersattributes_attributevalue                                    as meter_location,
+                nvl(rma_mech_gmm.metersattributes_attributevalue,
+                    rma_mech_mmc.metersattributes_attributevalue)                               as meter_mechanism,
+                num_reg.reg_count                                                               as num_registers,
+                nvl(rma_digits_gas.attributes_attributevalue,
+                    rma_digits_elec.attributes_attributevalue)                                  as num_dials,
+                rma_ssc.attributes_attributevalue                                               as SSC,
+                nvl(rma_mop.attributes_attributevalue, rma_mam.attributes_attributevalue)       as MOP_MAM,
+                nvl(rma_mop.attributes_effectivefromdate,
+                    rma_mam.attributes_effectivefromdate)                                       as MOP_MAM_effective_date,
+                old_mopmams.old_mopmams                                                         as old_MOP_MAM,
+                nvl(rma_osmop.attributes_attributevalue, rma_osmam.attributes_attributevalue)   as old_supplier_MOP_MAM,
+                case
+                    when met_repl.meter_id is not null then 'Yes'
+                    when met.removeddate is not null and met.removeddate < getdate() then 'Removed'
+                    else 'No'
+                    end                                                                         as MEX_occurred,
+                met_repl.installeddate                                                          as MEX_date,
 
-       -- F_Readings
-       case
-           when met.removeddate is null or met.removeddate > getdate() then null
-           else met.removeddate
-           end                                                                         as F_read_date,
-       case
-           when F_read_date is null then 'N/A'
-           when f_read_dc.status is null then 'No'
-           when f_read_dc.some_reg_missing_reads then 'Partial'
-           else f_read_dc.status end                                                   as F_read_dc,
-       case
-           when F_read_date is null then 'N/A'
-           else f_read_other.source end                                                as F_read_other_source,
-       case
-           when F_read_date is null then 'N/A'
-           when f_read_other.status is null then 'No'
-           when f_read_other.some_reg_missing_reads then 'Partial'
-           else f_read_other.status end                                                as F_read_other_status,
+                -- F_Readings
+                case
+                    when met.removeddate is null or met.removeddate > getdate() then null
+                    else met.removeddate
+                    end                                                                         as F_read_date,
+                case
+                    when F_read_date is null then 'N/A'
+                    when f_read_dc.status is null then 'No'
+                    when f_read_dc.some_reg_missing_reads then 'Partial'
+                    else f_read_dc.status end                                                   as F_read_dc,
+                case
+                    when F_read_date is null then 'N/A'
+                    else f_read_other.source end                                                as F_read_other_source,
+                case
+                    when F_read_date is null then 'N/A'
+                    when f_read_other.status is null then 'No'
+                    when f_read_other.some_reg_missing_reads then 'Partial'
+                    else f_read_other.status end                                                as F_read_other_status,
 
-       -- I_Readings
-       case
-           when met.installeddate < acc_mp_SSD then null
-           else met.installeddate
-           end                                                                         as I_read_date,
-       case
-           when I_read_date is null then 'N/A'
-           when i_read_dc.status is null then 'No'
-           when i_read_dc.some_reg_missing_reads then 'Partial'
-           else left(i_read_dc.status, len(i_read_dc.status) - 9) end                  as I_read_dc,
-       case
-           when I_read_date is null then 'N/A'
-           else i_read_other.source end                                                as I_read_other_source,
-       case
-           when I_read_date is null then 'N/A'
-           when i_read_other.status is null then 'No'
-           when i_read_other.some_reg_missing_reads then 'Partial'
-           else left(i_read_other.status, len(i_read_other.status) - 9) end            as I_read_other_status,
+                -- I_Readings
+                case
+                    when met.installeddate < acc_mp_SSD then null
+                    else met.installeddate
+                    end                                                                         as I_read_date,
+                case
+                    when I_read_date is null then 'N/A'
+                    when i_read_dc.status is null then 'No'
+                    when i_read_dc.some_reg_missing_reads then 'Partial'
+                    else left(i_read_dc.status, len(i_read_dc.status) - 9) end                  as I_read_dc,
+                case
+                    when I_read_date is null then 'N/A'
+                    else i_read_other.source end                                                as I_read_other_source,
+                case
+                    when I_read_date is null then 'N/A'
+                    when i_read_other.status is null then 'No'
+                    when i_read_other.some_reg_missing_reads then 'Partial'
+                    else left(i_read_other.status, len(i_read_other.status) - 9) end            as I_read_other_status,
 
-       -- SED_Readings
-       case
-           when acc_mp_SED is null or acc_mp_SED > getdate() or nvl(met.removeddate, acc_mp_SED + 1) < acc_mp_SED
-               then null
-           else acc_mp_SED
-           end                                                                         as SED_read_date,
-       case
-           when SED_read_date is null then 'N/A'
-           when sED_read_dc.status is null then 'No'
-           when sED_read_dc.some_reg_missing_reads then 'Partial'
-           else sED_read_dc.status end                                                 as SED_read_dc,
-       case
-           when SED_read_date is null then 'N/A'
-           else sED_read_other.source end                                              as SED_read_other_source,
-       case
-           when SED_read_date is null then 'N/A'
-           when sED_read_other.status is null then 'No'
-           when sED_read_other.some_reg_missing_reads then 'Partial'
-           else sED_read_other.status end                                              as SED_read_other_status,
+                -- SED_Readings
+                case
+                    when acc_mp_SED is null or acc_mp_SED > getdate() or
+                         nvl(met.removeddate, acc_mp_SED + 1) < acc_mp_SED
+                        then null
+                    else acc_mp_SED
+                    end                                                                         as SED_read_date,
+                case
+                    when SED_read_date is null then 'N/A'
+                    when sED_read_dc.status is null then 'No'
+                    when sED_read_dc.some_reg_missing_reads then 'Partial'
+                    else sED_read_dc.status end                                                 as SED_read_dc,
+                case
+                    when SED_read_date is null then 'N/A'
+                    else sED_read_other.source end                                              as SED_read_other_source,
+                case
+                    when SED_read_date is null then 'N/A'
+                    when sED_read_other.status is null then 'No'
+                    when sED_read_other.some_reg_missing_reads then 'Partial'
+                    else sED_read_other.status end                                              as SED_read_other_status,
 
-       -- SSD_Readings
-       case
-           when acc_mp_SSD > getdate() or acc_mp_SSD < met.installeddate then null
-           else acc_mp_SSD
-           end                                                                         as SSD_read_date,
-       case
-           when SSD_read_date is null then 'N/A'
-           when sSD_read_dc.status is null then 'No'
-           when sSD_read_dc.some_reg_missing_reads then 'Partial'
-           else left(sSD_read_dc.status, len(ssd_read_dc.status) - 9) end              as SSD_read_dc,
-       case
-           when SSD_read_date is null then 'N/A'
-           else sSD_read_other.source end                                              as SSD_read_other_source,
-       case
-           when SSD_read_date is null then 'N/A'
-           when sSD_read_other.status is null then 'No'
-           when sSD_read_other.some_reg_missing_reads then 'Partial'
-           else left(sSD_read_other.status, len(ssd_read_other.status) - 9) end        as SSD_read_other_status,
+                -- SSD_Readings
+                case
+                    when acc_mp_SSD > getdate() or acc_mp_SSD < met.installeddate then null
+                    else acc_mp_SSD
+                    end                                                                         as SSD_read_date,
+                case
+                    when SSD_read_date is null then 'N/A'
+                    when sSD_read_dc.status is null then 'No'
+                    when sSD_read_dc.some_reg_missing_reads then 'Partial'
+                    else left(sSD_read_dc.status, len(ssd_read_dc.status) - 9) end              as SSD_read_dc,
+                case
+                    when SSD_read_date is null then 'N/A'
+                    else sSD_read_other.source end                                              as SSD_read_other_source,
+                case
+                    when SSD_read_date is null then 'N/A'
+                    when sSD_read_other.status is null then 'No'
+                    when sSD_read_other.some_reg_missing_reads then 'Partial'
+                    else left(sSD_read_other.status, len(ssd_read_other.status) - 9) end        as SSD_read_other_status,
 
-       case
-           when estimates.num_reg is null then 'No'
-           when estimates.num_reg < num_registers then 'Partial'
-           else 'Yes'
-           end                                                                         as EAC_AQ_in,
-       estimates.effective_from                                                        as EAC_AQ_effective_date,
-       rma_sup_stat.attributes_attributevalue                                          as supply_status,
-       rma_imp.attributes_attributevalue                                               as gas_imperial_indicator,
-       rma_gain_sup.attributes_attributevalue                                          as gain_supplier,
-       neg_states.neg_state_occurred                                                   as neg_state_occurred,
-       read_summaries.num_valid_actual_reads,
-       read_summaries.num_inv_actual_reads,
-       read_summaries.first_valid_actual,
-       read_summaries.first_invalid_actual,
-       read_summaries.latest_valid_actual,
-       read_summaries.latest_invalid_actual,
-       read_summaries.latest_invalid_actual_type,
-       read_summaries.num_valid_smart_reads,
-       read_summaries.num_inv_smart_reads,
-       read_summaries.first_valid_smart,
-       read_summaries.first_invalid_smart,
-       read_summaries.latest_valid_smart,
-       read_summaries.latest_invalid_smart,
-       mp.meter_point_id                                                               as ensek_meterpoint_id,
-       met.meter_id                                                                    as ensek_meter_id,
-       getdate()                                                                       as etlchange
+                case
+                    when estimates.num_reg is null then 'No'
+                    when estimates.num_reg < num_registers then 'Partial'
+                    else 'Yes'
+                    end                                                                         as EAC_AQ_in,
+                estimates.effective_from                                                        as EAC_AQ_effective_date,
+                rma_sup_stat.attributes_attributevalue                                          as supply_status,
+                rma_imp.attributes_attributevalue                                               as gas_imperial_indicator,
+                rma_gain_sup.attributes_attributevalue                                          as gain_supplier,
+                neg_states.neg_state_occurred                                                   as neg_state_occurred,
+                read_summaries.num_valid_actual_reads,
+                read_summaries.num_inv_actual_reads,
+                read_summaries.first_valid_actual,
+                read_summaries.first_invalid_actual,
+                read_summaries.latest_valid_actual,
+                read_summaries.latest_invalid_actual,
+                read_summaries.latest_invalid_actual_type,
+                read_summaries.num_valid_smart_reads,
+                read_summaries.num_inv_smart_reads,
+                read_summaries.first_valid_smart,
+                read_summaries.first_invalid_smart,
+                read_summaries.latest_valid_smart,
+                read_summaries.latest_invalid_smart,
+                mp.meter_point_id                                                               as ensek_meterpoint_id,
+                met.meter_id                                                                    as ensek_meter_id,
+                getdate()                                                                       as etlchange
 from ref_meterpoints mp
          left join ref_meters met on met.meter_point_id = mp.meter_point_id and met.account_id = mp.account_id
          left join readings i_read_dc on met.account_id = i_read_dc.account_id and
@@ -327,13 +333,13 @@ from ref_meterpoints mp
                       mp.meterpointnumber = estimates.mpan
          left join current_mp_attr rma_sup_stat on rma_sup_stat.account_id = mp.account_id and
                                                    rma_sup_stat.meter_point_id = mp.meter_point_id and
-                                                   rma_sup_stat.attributes_attributename ilike 'Supply_Status'
+                                                   rma_sup_stat.attributes_attributename = 'Supply_Status'
          left join current_mp_attr rma_imp on rma_imp.account_id = mp.account_id and
                                               rma_imp.meter_point_id = mp.meter_point_id and
-                                              rma_imp.attributes_attributename ilike 'gas_imperial_meter_indicator'
+                                              rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
          left join current_mp_attr rma_gain_sup on rma_gain_sup.account_id = mp.account_id and
                                                    rma_gain_sup.meter_point_id = mp.meter_point_id and
-                                                   rma_gain_sup.attributes_attributename ilike 'gain_supplier'
+                                                   rma_gain_sup.attributes_attributename = 'GAIN_SUPPLIER'
          left join (select account_id,
                            meter_point_id,
                            sum((attributes_attributevalue in ('CANCELLED_IN_COOLING_OFF',
@@ -342,7 +348,7 @@ from ref_meterpoints mp
                                                               'REGISTRATION_REJECTED',
                                                               'WITHDRAWAL_SENT'))::int) > 0 as neg_state_occurred
                     from ref_meterpoints_attributes_audit
-                    where attributes_attributename ilike 'supply_status'
+                    where attributes_attributename = 'Supply_Status'
                     group by account_id, meter_point_id) neg_states on mp.account_id = neg_states.account_id and
                                                                        mp.meter_point_id = neg_states.meter_point_id
          left join (select account_id,
