@@ -109,39 +109,3 @@ group by state.account_id,
 order by mp_elec.account_id, mp_elec.meter_point_id, mp_elec.supplystartdate, mt_elec.meter_id
 
 
-SELECT left(postcode, len(postcode) - 3) as postcode FROM ref_cdb_addresses group by left(postcode, len(postcode) - 3)
-
-create or replace view vw_metering_report_reads_info as
-select max(
-         case when y.n = 1 then estimation_value else 0 end) over (partition by y.register_id) latest_eac,
-       max(
-         case when y.n = 2 then estimation_value else 0 end) over (partition by y.register_id) previous_eac,
-       y.account_id,
-       y.meterpointnumber,
-       y.registerreference,
-       y.register_id,
-       y.no_of_digits,
-       y.meterreadingdatetime,
-       y.meterreadingcreateddate,
-       y.meterreadingsourceuid,
-       y.meterreadingtypeuid,
-       y.meterreadingstatusuid,
-       y.corrected_reading,
-       y.total_reads
-from (select r.*,
-             dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
-             count(*) over (partition by account_id, register_id)                                        total_reads
-      from ref_readings_internal_valid r) y
-       left outer join ref_estimates_elec_internal ee
-         on ee.account_id = y.account_id and y.meterpointnumber = ee.mpan and
-            y.registerreference = ee.register_id
-              and y.meterserialnumber = ee.serial_number and
-            ee.effective_from = y.meterreadingdatetime
-where y.n <= 1
-
-
-  select  '"'+ mpa_elec.attributes_attributevalue ='"'
-
-GRANT USAGE ON SCHEMA aws_met_stage1_extracts TO GROUP read_only_users;
-GRANT SELECT ON ALL TABLES IN SCHEMA  aws_met_stage1_extracts TO GROUP read_only_users;
-ALTER DEFAULT PRIVILEGES IN SCHEMA  aws_met_stage1_extracts GRANT SELECT ON TABLES TO GROUP read_only_users;
