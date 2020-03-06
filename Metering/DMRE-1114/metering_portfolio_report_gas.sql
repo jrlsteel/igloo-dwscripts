@@ -30,6 +30,7 @@ select state.account_id,
        vmri.meterreadingtypeuid,
        vmri.meterreadingsourceuid,
        vmri.meterreadingdatetime,
+
        max(case
              when mpa_gas.attributes_attributename = 'Profile Class' then mpa_gas.attributes_attributevalue
                end)                      as mpa_gas_profile_class,
