@@ -24,3 +24,5 @@ from (select r.*,
             y.registerreference = ee.register_id
               and y.meterserialnumber = ee.serial_number and
             ee.effective_from = y.meterreadingdatetime
+
+
