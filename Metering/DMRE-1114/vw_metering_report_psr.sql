@@ -1,10 +1,11 @@
+drop view vw_metering_report_psr
 create or replace  view vw_metering_report_psr as select scoa.id,
        scoa.external_id,
        up.user_id,
        attr.entity_type,
        attr.attribute_type_id,
        attr.attribute_value_id,
-       attr.attribute_custom_value as psr
+       replace(replace(replace(replace(attr.attribute_custom_value,',',' '), '[', ''), ']', ''), '"', '') as psr
 from vw_supply_contracts_with_occ_accs scoa
        inner join ref_cdb_user_permissions up
          on scoa.id = up.permissionable_id and up.permissionable_type = 'App\\SupplyContract'
