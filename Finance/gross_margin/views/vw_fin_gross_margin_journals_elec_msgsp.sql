@@ -8,9 +8,7 @@ select elec.*,
                   else elec.gspgroupid end, gsp.gsp, gsp_link.gsp) as gspgroupid_1
 
 FROM aws_fin_stage1_extracts.fin_gross_margin_journals_elec elec
-       left join (select accountid, gsp
-                  from aws_fin_stage1_extracts.fin_gross_margin_missing_gsp
-                  where gsp != '' or gsp is not null group by accountid, gsp) gsp on gsp.accountid = elec.accountid
+       left join public.vw_fin_gross_margin_missing_gsp gsp on gsp.accountid = elec.accountid and gsp.rowid = 1
        left join (select mp.account_id, max(rma_gsp.attributes_attributevalue) as gsp
                   from public.ref_meterpoints_raw mp
                          inner join public.ref_meterpoints_raw prev_at_address

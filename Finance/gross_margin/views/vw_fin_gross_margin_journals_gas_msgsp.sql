@@ -14,7 +14,7 @@ from (select gas.*,
                           end, msgsp.gsp, dcf.gsp, gsp_link.gsp) as gspgroupid_1
       from aws_fin_stage1_extracts.fin_gross_margin_journals_gas gas
              left join public.vw_fin_gross_margin_gas_gsp gsp_1 on gas.accountid = gsp_1.accountid
-             left join public.vw_fin_gross_margin_missing_gsp msgsp on gsp_1.accountid = msgsp.accountid
+             left join public.vw_fin_gross_margin_missing_gsp msgsp on gsp_1.accountid = msgsp.accountid and msgsp.rowid = 1
              left join public.ref_calculated_daily_customer_file dcf on dcf.account_id = gas.accountid
              left join (select accountid, gsp
                         from aws_fin_stage1_extracts.fin_gross_margin_missing_gsp
