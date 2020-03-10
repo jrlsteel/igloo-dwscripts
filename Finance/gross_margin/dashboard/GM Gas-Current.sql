@@ -31,7 +31,7 @@ select gspgroupid,
                        SUM(gas.CustomerFixedCost)         as CustomerFixedCost,
                        SUM(gas.NTSCommodityCost)          as NTSCommodityCost,
                        SUM(gas.LDZExitCapacityCost)       as LDZExitCapacityCost,
-                       SUM(gas.WholesaleCost)             as WholesaleCost,
+                       SUM(gas.WholesaleCost_dec)             as WholesaleCost,
                        SUM(gas.BalancingFee)              as BalancingFee,
                        SUM(gas.ManagementFee)             as ManagementFee,
                        SUM(gas.reconciliation_revenue)    as Rec_TheoreticalRevenue,
@@ -64,7 +64,7 @@ select gspgroupid,
                        SUM(gas.CustomerFixedCost)         as CustomerFixedCost,
                        SUM(gas.NTSCommodityCost)          as NTSCommodityCost,
                        SUM(gas.LDZExitCapacityCost)       as LDZExitCapacityCost,
-                       SUM(gas.WholesaleCost)             as WholesaleCost,
+                       SUM(gas.WholesaleCost_dec)             as WholesaleCost,
                        SUM(gas.BalancingFee)              as BalancingFee,
                        SUM(gas.ManagementFee)             as ManagementFee,
                        SUM(gas.reconciliation_revenue)    as Rec_TheoreticalRevenue,
@@ -77,3 +77,4 @@ select gspgroupid,
                 and timestamp = '$ReportMonth'
            ) stg_Tots)tots
 order by key, gspgroupid;
+s
