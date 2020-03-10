@@ -1,3 +1,5 @@
+drop table ref_calculated_metering_portfolio_elec_report
+create table ref_calculated_metering_portfolio_elec_report as
 select state.account_id,
        left(postcode, len(postcode) - 3) as Postcode,
        state.acc_stat,
@@ -50,18 +52,7 @@ select state.account_id,
        max(case
              when mta_elec.metersattributes_attributename = 'MeterType' then mta_elec.metersattributes_attributevalue
                end)                      as mta_elec_meter_type,
-       max(case
-             when trim(mta_elec.metersattributes_attributename) = 'Year_Of_Manufacture'
-                     then mta_elec.metersattributes_attributevalue
-               end)                      as mta_elec_meter_year_manu,
-       max(case
-             when mta_elec.metersattributes_attributename = 'Manufacture_Code'
-                     then mta_elec.metersattributes_attributevalue
-               end)                      as mta_elec_meter_manu_code,
-       max(case
-             when mta_elec.metersattributes_attributename = 'Model_Code'
-                     then mta_elec.metersattributes_attributevalue
-               end)                      as mta_elec_meter_model_code
+       getdate() as etlchange
 from vw_meterpoint_live_state state
        inner join ref_meterpoints mp_elec on state.account_id = mp_elec.account_id and
                                              mp_elec.meterpointtype = 'E'
