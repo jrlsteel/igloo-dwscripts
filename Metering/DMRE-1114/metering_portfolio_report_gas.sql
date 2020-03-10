@@ -1,3 +1,5 @@
+drop table ref_calculated_metering_portfolio_gas_report
+create table ref_calculated_metering_portfolio_gas_report as
 select state.account_id,
        left(postcode, len(postcode) - 3) as Postcode,
        state.acc_stat,
@@ -25,15 +27,10 @@ select state.account_id,
        mt_gas.meterserialnumber,
        mt_gas.installeddate,
        reg_elec.register_id,
-       reg_elec.registers_tpr,
        vmri.meterreadingstatusuid,
        vmri.meterreadingtypeuid,
        vmri.meterreadingsourceuid,
        vmri.meterreadingdatetime,
-
-       max(case
-             when mpa_gas.attributes_attributename = 'Profile Class' then mpa_gas.attributes_attributevalue
-               end)                      as mpa_gas_profile_class,
        max(case
              when mpa_gas.attributes_attributename = 'LDZ' then mpa_gas.attributes_attributevalue
                end)                      as mpa_gas_LDZ,
@@ -49,7 +46,7 @@ select state.account_id,
                      then replace(replace(mpa_gas.attributes_attributevalue,',',' '),'"',' ')
                end)                      as mpa_gas_meter_make_model,
        max(case
-             when mta_gas.metersattributes_attributename = 'MeterType' then mta_gas.metersattributes_attributevalue
+             when mta_gas.metersattributes_attributename = 'Meter_Mechanism_Code' then mta_gas.metersattributes_attributevalue
                end)                      as mta_gas_meter_type,
        max(case
              when trim(mta_gas.metersattributes_attributename) = 'Year_Of_Manufacture'
@@ -62,7 +59,8 @@ select state.account_id,
        max(case
              when mta_gas.metersattributes_attributename = 'Model_Code'
                      then mta_gas.metersattributes_attributevalue
-               end)                      as mta_gas_meter_model_code
+               end)                      as mta_gas_meter_model_code,
+       getdate()                         as etlchange
 from vw_meterpoint_live_state state
        inner join ref_meterpoints mp_gas on state.account_id = mp_gas.account_id and
                                              mp_gas.meterpointtype = 'G'
@@ -111,11 +109,8 @@ group by state.account_id,
          accs.billdayofmonth,
          accs.nextbilldate,
          mt_gas.meter_id,
-         mt_gas.meterserialnumber,
-         mt_gas.installeddate,
-         reg_elec.register_id,
-         reg_elec.registers_tpr,
-         vmri.meterreadingstatusuid,
+         mt_gas.meterserialnumber,mt_gas.installeddate,
+         reg_elec.register_id, vmri.meterreadingstatusuid,
          vmri.meterreadingtypeuid,
          vmri.meterreadingsourceuid,
          vmri.meterreadingdatetime
