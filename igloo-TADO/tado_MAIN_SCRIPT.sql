@@ -1,315 +1,176 @@
-drop table temp_tado_update;
-create table temp_tado_update as
-select x2.user_id,
-       x2.account_id,
-       x2.supply_address_id,
-       x2.postcode,
-       x2.fuel_type,
-       x2.base_temp,
-       x2.heating_basis,
-       x2.heating_control_type,
-       x2.heating_source,
-       x2.house_bedrooms,
-       x2.house_type,
-       x2.house_age,
-       x2.ages,
-       x2.family_category,
-       x2.mmh_tado_status,
-       x2.base_temp_used,
-       x2.estimated_temp,
-       x2.base_hours,
-       x2.estimated_hours,
-       x2.base_mit,
-       x2.estimated_mit,
-       x2.mmhkw_heating_source,
-       x2.mmhkw_floor_area_band,
-       x2.mmhkw_prop_age_id,
-       x2.mmhkw_prop_type_id,
-       x2.region_id,
-       x2.annual_consumption,
-       x2.annual_consumption_source,
-       x2.unit_rate_with_vat,
-       x2.unit_rate_source,
-       x2.savings_perc,
-       x2.avg_savings_perc,
+with current_attributes as (
+    select *
+    from (select attr.entity_id,
+                 attr.entity_type,
+                 attr.attribute_type_id,
+                 attr_t.attribute_name,
+                 attr.attribute_value_id                                       as attribute_value_id,
+                 coalesce(attr.attribute_custom_value, attr_v.attribute_value) as attribute_value,
+                 row_number() over (partition by attr.entity_id, attr.attribute_type_id, attr_t.attribute_name
+                     order by attr.updated_at desc)                            as rn_recency
+          from ref_cdb_attributes attr
+                   left join ref_cdb_attribute_types attr_t on attr.attribute_type_id = attr_t.id
+                   left join ref_cdb_attribute_values attr_v on attr.attribute_value_id = attr_v.id and
+                                                                attr.attribute_type_id = attr_v.attribute_type_id
+          where getdate() >= attr.effective_from
+            and (attr.effective_to is null or attr.effective_to >= getdate())) formatted_attributes
+    where rn_recency = 1
+)
+select nvl(u.id, -1)                                                                    as user_id,
+       nvl(sc.external_id, -1)                                                          as account_id,
+       nvl(addr.id, -1)                                                                 as supply_address_id,
+       addr.postcode                                                                    as postcode,
        case
-           when x2.mmh_tado_status in ('nodata', 'incomplete') then 'avg_perc'
+           when len(fuel_types.fuel_type) = 2 then 'EG'
+           else fuel_types.fuel_type end                                                as fuel_type,
+       nvl(ca_base_temp.attribute_value::double precision, -99.0)                       as base_temp,
+       nvl(ca_heating_basis.attribute_value, 'unknown')                                 as heating_basis,
+       nvl(ca_heating_controls.converted_value, ca_heating_control_type.attribute_value,
+           'unknown')                                                                   as heating_control_type,
+       nvl(ca_heating_source.attribute_value, 'unknown')                                as heating_source,
+       nvl(ca_house_bedrooms.attribute_value, 'unknown')                                as house_bedrooms,
+       nvl(ca_house_type.attribute_value, 'unknown')                                    as house_type,
+       nvl(ca_house_age.attribute_value, 'unknown')                                     as house_age,
+       nvl(ca_ages.attribute_value, 'unknown')                                          as ages,
+       tado_heating_summary(nvl(ca_ages.attribute_value, ''))                           as family_category,
+       case
+           when surv_resp.user_id is null
+               then 'nodata'
+           when base_temp <= 0 or
+                heating_control_type in ('', 'unknown') or
+                heating_basis in ('', 'unknown') or
+                family_category in ('', 'unknown') or
+                heating_source in ('', 'unknown') or
+                ages in ('', 'unknown')
+               then 'incomplete'
+           else 'complete' end                                                          as mmh_tado_status,
+       nvl(nullif(ca_base_temp.attribute_value::double precision, 0), 20.0)             as base_temp_used,
+       tado_estimate_setpoint_impact(base_temp_used, heating_control_type,
+                                     heating_basis)                                     as estimated_temp,
+       tado_estimate_heating_hours(family_category, 'base')                             as base_hours,
+       tado_estimate_heating_hours(family_category, 'estimate')                         as estimated_hours,
+       tado_estimate_mean_internal_temp(base_temp_used,
+                                        nvl(base_hours, 0.0))                           as base_mit,
+       tado_estimate_mean_internal_temp(estimated_temp,
+                                        nvl(estimated_hours, 0.0))                      as estimated_mit,
+       tado_get_heating_source(heating_source)                                          as mmhkw_heating_source,
+       tado_get_prop_floor_area_band(house_bedrooms, house_type)                        as mmhkw_floor_area_band,
+       tado_get_prop_age_id(house_age)                                                  as mmhkw_prop_age_id,
+       tado_get_prop_type_id(house_type)                                                as mmhkw_prop_type_id,
+       mmhpc.region_id                                                                  as region_id,
+       case
+           when (fuel_type = 'E' and heating_source = 'gasboiler')
+               or heating_source = 'oilboiler' then (select gas_usage_gas_heating
+                                                     from ref_cdb_mmh_need_profiling_lookup
+                                                     where region_id = mmhpc.region_id
+                                                       and prop_type = mmhkw_prop_type_id
+                                                       and prop_age = mmhkw_prop_age_id
+                                                       and floor_area_band = mmhkw_floor_area_band)
+           when nvl(cag.ca_value, 0) != 0 then cag.ca_value
+           else (select gas_usage_gas_heating
+                 from ref_cdb_mmh_need_profiling_lookup
+                 where region_id = mmhpc.region_id
+                   and prop_type = mmhkw_prop_type_id
+                   and prop_age = mmhkw_prop_age_id
+                   and floor_area_band = mmhkw_floor_area_band) end                     as annual_consumption,
+       case
+           when (fuel_type = 'E' and heating_source = 'gasboiler')
+               or heating_source = 'oilboiler' then 'mmh_kwh' --mmh_like_yours
+           when nvl(cag.ca_value, 0) != 0 then cag.ca_source -- aq
+           else 'mmh_kwh' --mmh_like_yours
+           end                                                                          as annual_consumption_source,
+       case
+           when (fuel_type = 'E' and heating_source = 'gasboiler')
+               then (gas_off_grid.fuel_rate + (gas_off_grid.fuel_rate * .05)) / 100
+           when heating_source = 'oilboiler'
+               then (oil_off_grid.fuel_rate + (oil_off_grid.fuel_rate * .05)) / 100
+           else (nvl(gas_grid_ur.rate, 0) + (nvl(gas_grid_ur.rate, 0) * .05)) / 100 end as unit_rate_with_vat,
+       case
+           when (fuel_type = 'E' and heating_source = 'gasboiler') then 'gas_offgrid'
+           when heating_source = 'oilboiler' then 'oil'
+           else 'gas' end                                                               as unit_rate_source,
+       ((estimated_mit - base_mit) / base_mit * 100)                                    as savings_perc,
+       (select avg_perc_diff from ref_calculated_tado_efficiency_average)               as avg_savings_perc,
+       case
+           when mmh_tado_status in ('nodata', 'incomplete') then 'avg_perc'
            else 'tado_perc'
-           end                                       as savings_perc_source,
-       x2.annual_consumption * x2.unit_rate_with_vat as amount_over_year,
+           end                                                                          as savings_perc_source,
+       annual_consumption * unit_rate_with_vat                                          as amount_over_year,
        case
-           when x2.mmh_tado_status in ('nodata', 'incomplete') then
-                   (x2.annual_consumption * x2.unit_rate_with_vat * x2.avg_savings_perc) / 100
-           else (x2.annual_consumption * x2.unit_rate_with_vat * x2.savings_perc) / 100
-           end                                       as savings_in_pounds,
-       tado_savings_segmentation(
-               x2.mmh_tado_status,
-               x2.fuel_type,
-               x2.heating_control_type,
-               x2.heating_source,
-               (case
-                    when x2.mmh_tado_status in ('nodata', 'incomplete') then
-                            (x2.annual_consumption * x2.unit_rate_with_vat * x2.avg_savings_perc) / 100
-                    else (x2.annual_consumption * x2.unit_rate_with_vat * x2.savings_perc) / 100
-                   end
-                   ))                                as segment,
-       getdate()                                     as etlchange
-
-
---into #temp_tado_eff ---- TEMP TABLE ---
-
---Model 3rd Level Inputs
-from (select x1.*,
-             tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0),
-                                              coalesce(x1.base_hours, 0.0))               as base_mit,
-             tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0),
-                                              coalesce(x1.estimated_hours, 0.0))          as estimated_mit,
-             (
-                         (
-                                 tado_estimate_mean_internal_temp(coalesce(x1.estimated_temp, 0.0),
-                                                                  coalesce(x1.estimated_hours, 0.0)) -
-                                 tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0),
-                                                                  coalesce(x1.base_hours, 0.0))
-                             ) /
-                         tado_estimate_mean_internal_temp(coalesce(x1.base_temp_used, 0.0),
-                                                          coalesce(x1.base_hours, 0.0)) * 100
-                 )                                                                        as savings_perc,
-             (select avg_perc_diff from ref_calculated_tado_efficiency_average)           as avg_savings_perc,
-             case
-                 when (x1.fuel_type = 'E' and x1.heating_source = 'gasboiler')
-                     or x1.heating_source = 'oilboiler' then (select gas_usage_gas_heating
-                                                              from ref_cdb_mmh_need_profiling_lookup
-                                                              where region_id = x1.region_id
-                                                                and prop_type = x1.mmhkw_prop_type_id
-                                                                and prop_age = x1.mmhkw_prop_age_id
-                                                                and floor_area_band = x1.mmhkw_floor_area_band)
-                 else case
-                          when x1.gas_consumption_accuracy_value != 0 then x1.gas_consumption_accuracy_value
-                          else (select gas_usage_gas_heating
-                                from ref_cdb_mmh_need_profiling_lookup
-                                where region_id = x1.region_id
-                                  and prop_type = x1.mmhkw_prop_type_id
-                                  and prop_age = x1.mmhkw_prop_age_id
-                                  and floor_area_band = x1.mmhkw_floor_area_band) end end as annual_consumption,
-             case
-                 when (x1.fuel_type = 'E' and x1.heating_source = 'gasboiler')
-                     or x1.heating_source = 'oilboiler' then 'mmh_kwh' --mmh_like_yours
-                 else case
-                          when x1.gas_consumption_accuracy_value != 0 then x1.gas_consumption_accuracy_type -- aq
-                          else 'mmh_kwh' --mmh_like_yours
-                     end end                                                              as annual_consumption_source,
-             case
-                 when (x1.fuel_type = 'E' and x1.heating_source = 'gasboiler')
-                     then (unit_rate_gas_offgrid + (unit_rate_gas_offgrid * .05)) / 100
-                 else case
-                          when x1.heating_source = 'oilboiler'
-                              then (unit_rate_oil + (unit_rate_oil * .05)) / 100
-                          else (unit_rate_gas + (unit_rate_gas * .05)) / 100 end end      as unit_rate_with_vat,
-             case
-                 when (x1.fuel_type = 'E' and x1.heating_source = 'gasboiler') then 'gas_offgrid'
-                 else case
-                          when x1.heating_source = 'oilboiler' then 'oil'
-                          else 'gas' end end                                              as unit_rate_source
-
-
-             --Model 2nd Level Inputs
-      from (select x.user_id,
-                   x.account_id,
-                   x.supply_address_id,
-                   x.postcode,
-                   x.base_temp,
-                   case
-                       when x.base_temp <= 0 then x.default_base_temp
-                       else x.base_temp end                                                 as base_temp_used,
-                   case
-                       when heating_control_type = '' then 'unknown'
-                       else x.heating_control_type end                                      as heating_control_type,
-                   case when x.heating_basis = '' then 'unknown' else x.heating_basis end   as heating_basis,
-                   case
-                       when x.family_category = '' or x.family_category = 'unknown' then 'unknown'
-                       else x.family_category end                                           as family_category,
-                   case when x.heating_source = '' then 'unknown' else x.heating_source end as heating_source,
-                   case when x.house_bedrooms = '' then 'unknown' else x.house_bedrooms end as house_bedrooms,
-                   case when x.house_type = '' then 'unknown' else x.house_type end         as house_type,
-                   case when x.house_age = '' then 'unknown' else x.house_age end           as house_age,
-                   case when x.ages = '' then 'unknown' else x.ages end                     as ages,
-                   (case
-                        when x.sr_user_id is null
-                            then 'nodata'
-                        else case
-                                 when x.base_temp <= 0 or heating_control_type = '' or x.heating_basis = '' or
-                                      x.family_category in ('', 'unknown') or
-                                      x.heating_source = '' or x.ages = ''
-                                     then 'incomplete'
-                                 else 'complete' end end)                                   as mmh_tado_status,
-                   x.fuel_type,
-                   tado_estimate_setpoint_impact(
-                           case
-                               when x.base_temp <= 0 then x.default_base_temp
-                               else x.base_temp end,
-                           x.heating_control_type,
-                           x.heating_basis)                                                 as estimated_temp,
-                   tado_estimate_heating_hours(coalesce(x.family_category, ''), 'base')     as base_hours,
-                   tado_estimate_heating_hours(coalesce(x.family_category, ''), 'estimate') as estimated_hours,
-                   tado_get_heating_source(coalesce(x.heating_source, ''))                  as mmhkw_heating_source,
-                   tado_get_prop_floor_area_band(coalesce(x.house_bedrooms, ''),
-                                                 coalesce(x.house_type, ''))                as mmhkw_floor_area_band,
-                   tado_get_prop_age_id(coalesce(x.house_age, ''))                          as mmhkw_prop_age_id,
-                   tado_get_prop_type_id(coalesce(x.house_type, ''))                        as mmhkw_prop_type_id,
-                   mmhpc.region_id                                                          as region_id,
-                   coalesce(tf.rate, 0)                                                     as unit_rate_gas,
-                   (select fuel_rate from ref_calculated_tado_fuel where fuel_id = 1)       as unit_rate_oil,
-                   (select fuel_rate from ref_calculated_tado_fuel where fuel_id = 2)       as unit_rate_gas_offgrid,
-                   get_best_consumption(coalesce(rcag.igl_ind_aq, 0), coalesce(rcag.ind_aq, 0),
-                                        coalesce(rcag.pa_cons_gas, 0), coalesce(rcag.quotes_aq, 0),
-                                        'gas')                                              as gas_consumption_accuracy_type,
-                   case
-                       when gas_consumption_accuracy_type = 'igl_ind_aq' then rcag.igl_ind_aq
-                       when gas_consumption_accuracy_type = 'ind_aq' then rcag.ind_aq
-                       when gas_consumption_accuracy_type = 'pa_cons_gas' then rcag.pa_cons_gas
-                       when gas_consumption_accuracy_type = 'quotes_aq' then rcag.quotes_aq
-                       else 0 end                                                           as gas_consumption_accuracy_value
-
-
-                   -- Model 1st Level Inputs
-            from (select user_id,
-                         account_id,
-                         supply_address_id,
-                         postcode,
-
-                         max(sr_user_id)                           as sr_user_id, --
-                         cast(max(base_temp) as double precision)  as base_temp,
-                         20.00                                     as default_base_temp,
-
-
-                         max(heating_basis)                        as heating_basis,
-                         coalesce(nullif(max(heating_controls), ''),
-                                  max(heating_control_type))       as heating_control_type,
-                         max(heating_source)                       as heating_source,
-                         max(house_bedrooms)                       as house_bedrooms,
-                         max(house_type)                           as house_type,
-                         max(house_age)                            as house_age,
-
-
-                         (select listagg(distinct mp.meterpointtype)
-                          from ref_meterpoints mp
-                          where mp.account_id = l1.account_id ---- su.external_id
-                                --and (mp.supplyenddate is null or mp.supplyenddate >= getdate())
-                          group by mp.account_id)                  as fuel_type,
-                         coalesce(max(attribute_custom_value), '') as ages, -- TODO: this doesn't select age fields, just anything with a custom value.
-                         max(family_category)                      as family_category
-
-
-                  from
-                      ----- New SUB-QUERY : Added: T.A ; Purpose: Improve Query Performance ;  Date: 15/11/2019 -----
-                      (
-                          select u.id                      as user_id,
-                                 su.external_id            as account_id,
-                                 su.supply_address_id      as supply_address_id,
-                                 addr.postcode             as postcode,
-                                 sr.user_id                as sr_user_id,
-                                 at.attribute_custom_value as attribute_custom_value,
-
-                                 case
-                                     when att.attribute_name = 'temperature_preference' then av.attribute_value
-                                     else '-99' end        as base_temp,
-
-                                 case
-                                     when att.attribute_name = 'heating_basis' then av.attribute_value
-                                     else '' end           as heating_basis,
-                                 case
-                                     when att.attribute_name = 'heating_control_type' then av.attribute_value
-                                     else '' end           as heating_control_type,
-                                 case
-                                     when att.attribute_name = 'heating_type' then av.attribute_value
-                                     else '' end           as heating_source,
-                                 case
-                                     when att.attribute_name = 'house_bedrooms' then av.attribute_value
-                                     else '' end           as house_bedrooms,
-                                 case
-                                     when att.attribute_name = 'house_type' then av.attribute_value
-                                     else '' end           as house_type,
-                                 case
-                                     when att.attribute_name = 'house_age' then av.attribute_value
-                                     else '' end           as house_age,
-                                 case
-                                     when att.attribute_name = 'resident_ages'
-                                         then tado_heating_summary(coalesce(at.attribute_custom_value, ''))
-                                     else '' end           as family_category,
-                                 case
-                                     when att.attribute_name = 'heating_controls'
-                                         then case json_extract_path_text(at.attribute_custom_value, 'type') + '~' +
-                                                   json_extract_path_text(at.attribute_custom_value, 'functionality')
-                                                  when 'none' then 'nocontrol'
-                                                  when 'smart_thermostat~timer_control'
-                                                      then 'smartthermostat'
-                                                  when 'smart_thermostat~smart_app_control'
-                                                      then 'smartthermostat'
-                                                  when 'thermostat_only~thermostat_manual_control'
-                                                      then 'thermostatmanual'
-                                                  when 'thermostat_only~thermostat_set_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'thermostat_only~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_only~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_only~timer_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'timer_thermostat~thermostat_manual_control'
-                                                      then 'thermostatmanual'
-                                                  when 'timer_thermostat~thermostat_set_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'timer_thermostat~manual_control'
-                                                      then 'manually'
-                                                  when 'timer_thermostat~timer_control'
-                                                      then 'thermostatautomatic'
-                                                  when 'unknown' then 'unknown'
-                                                  else null end
-                                     else '' end           as heating_controls
-
-                          from ref_cdb_supply_contracts su
-                                   inner join ref_cdb_addresses addr on su.supply_address_id = addr.id
-                                   inner join ref_cdb_user_permissions up
-                                              on su.id = up.permissionable_id and permission_level = 0
-                                                  and permissionable_type ILIKE 'App%SupplyContract'
-                                   inner join ref_cdb_users u on u.id = up.user_id
-                                   left outer join ref_cdb_attributes at on (
-                                                                                    (at.entity_id = up.user_id AND at.entity_type ILIKE 'App%User')
-                                                                                    OR
-                                                                                    (at.entity_id = su.supply_address_id AND
-                                                                                     at.entity_type ILIKE 'App%Address')
-                                                                                )
-                              and at.effective_to is null
-
-                                   left outer join ref_cdb_attribute_types att
-                                                   on att.id = at.attribute_type_id and att.effective_to is null
-                                   left outer join ref_cdb_attribute_values av
-                                                   on av.attribute_type_id = at.attribute_type_id and
-                                                      at.attribute_value_id = av.id
-                                                       and at.attribute_value_id is not null
-                                   left outer join ref_cdb_survey_questions sq on sq.attribute_type_id = att.id
-                                   left outer join ref_cdb_survey_category sc on sc.id = sq.survey_category_id
-                                   left outer join (select user_id, survey_id
-                                                    from ref_cdb_survey_response
-                                                    where survey_id = 1
-                                                    group by user_id, survey_id) sr on sr.user_id = up.user_id
-                          where (att.attribute_name in ('resident_ages',
-                                                        'heating_control_type',
-                                                        'temperature_preference',
-                                                        'heating_basis',
-                                                        'heating_type',
-                                                        'house_bedrooms',
-                                                        'house_type',
-                                                        'house_age',
-                                                        'heating_controls')
-                              or sr.user_id is null or att.attribute_name is null)
-                      ) l1
-                  group by user_id, account_id, supply_address_id, postcode) x
-                     left outer join ref_consumption_accuracy_gas rcag
-                                     on x.account_id = rcag.account_id -- moved to level 2 and removed group by
-                     left outer join ref_tariff_history_gas_ur tf
-                                     on tf.account_id = x.account_id and tf.end_date is null
-                     left outer join ref_cdb_mmh_need_postcode_lookup mmhpc
-                                     on mmhpc.outcode = left(x.postcode, len(postcode) - 3)
-           ) x1
-     ) x2
+           when savings_perc_source = 'avg_perc' then
+               (annual_consumption * unit_rate_with_vat * avg_savings_perc) / 100
+           else (annual_consumption * unit_rate_with_vat * savings_perc) / 100
+           end                                                                          as savings_in_pounds,
+       tado_savings_segmentation(mmh_tado_status,
+                                 fuel_type,
+                                 heating_control_type,
+                                 heating_source,
+                                 savings_in_pounds)                                     as segment,
+       getdate()                                                                        as etlchange
+from ref_cdb_supply_contracts sc
+         inner join ref_cdb_user_permissions up
+                    on sc.id = up.permissionable_id and up.permissionable_type = 'App\\\\SupplyContract' and
+                       up.permission_level = 0
+         inner join ref_cdb_users u on up.user_id = u.id
+         inner join ref_cdb_addresses addr on addr.id = sc.supply_address_id
+         left join (select account_id, listagg(distinct meterpointtype) as fuel_type
+                    from ref_meterpoints
+                    group by account_id) fuel_types on fuel_types.account_id = sc.external_id
+         left join current_attributes ca_base_temp
+                   on ca_base_temp.attribute_name = 'temperature_preference' and ca_base_temp.entity_id = u.id
+         left join current_attributes ca_heating_basis
+                   on ca_heating_basis.attribute_name = 'heating_basis' and ca_heating_basis.entity_id = addr.id
+         left join (select attribute_name,
+                           entity_id         as address_id,
+                           attribute_value,
+                           case json_extract_path_text(attribute_value, 'type') + '~' +
+                                json_extract_path_text(attribute_value, 'functionality')
+                               when 'none~' then 'nocontrol'
+                               when 'smart_thermostat~timer_control'
+                                   then 'smartthermostat'
+                               when 'smart_thermostat~smart_app_control'
+                                   then 'smartthermostat'
+                               when 'thermostat_only~thermostat_manual_control'
+                                   then 'thermostatmanual'
+                               when 'thermostat_only~thermostat_set_control'
+                                   then 'thermostatautomatic'
+                               when 'thermostat_only~manual_control'
+                                   then 'manually'
+                               when 'timer_only~manual_control'
+                                   then 'manually'
+                               when 'timer_only~timer_control'
+                                   then 'thermostatautomatic'
+                               when 'timer_thermostat~thermostat_manual_control'
+                                   then 'thermostatmanual'
+                               when 'timer_thermostat~thermostat_set_control'
+                                   then 'thermostatautomatic'
+                               when 'timer_thermostat~manual_control'
+                                   then 'manually'
+                               when 'timer_thermostat~timer_control'
+                                   then 'thermostatautomatic'
+                               when 'unknown~' then 'unknown'
+                               else null end as converted_value
+                    from current_attributes
+                    where attribute_name = 'heating_controls') ca_heating_controls
+                   on ca_heating_controls.attribute_name = 'heating_controls' and
+                      ca_heating_controls.address_id = addr.id
+         left join current_attributes ca_heating_control_type
+                   on ca_heating_control_type.attribute_name = 'heating_control_type' and
+                      ca_heating_control_type.entity_id = addr.id
+         left join current_attributes ca_heating_source
+                   on ca_heating_source.attribute_name = 'heating_type' and ca_heating_source.entity_id = addr.id
+         left join current_attributes ca_house_bedrooms
+                   on ca_house_bedrooms.attribute_name = 'house_bedrooms' and ca_house_bedrooms.entity_id = addr.id
+         left join current_attributes ca_house_type
+                   on ca_house_type.attribute_name = 'house_type' and ca_house_type.entity_id = addr.id
+         left join current_attributes ca_house_age
+                   on ca_house_age.attribute_name = 'house_age' and ca_house_age.entity_id = addr.id
+         left join current_attributes ca_ages on ca_ages.attribute_name = 'resident_ages' and ca_ages.entity_id = u.id
+         left join ref_cdb_mmh_need_postcode_lookup mmhpc on mmhpc.outcode = left(addr.postcode, len(addr.postcode) - 3)
+         left join vw_cons_acc_gas cag on cag.account_id = sc.external_id
+         left join ref_calculated_tado_fuel gas_off_grid on gas_off_grid.fuel_tariff_name = 'gas'
+         left join ref_calculated_tado_fuel oil_off_grid on oil_off_grid.fuel_tariff_name = 'oil'
+         left join ref_tariff_history_gas_ur gas_grid_ur
+                   on gas_grid_ur.account_id = sc.external_id and gas_grid_ur.end_date is null
+         left join (select distinct user_id from ref_cdb_survey_response where survey_id = 1) surv_resp
+                   on surv_resp.user_id = u.id
