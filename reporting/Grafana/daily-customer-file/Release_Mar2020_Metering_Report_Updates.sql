@@ -1,0 +1,76 @@
+/*
+ Adding new rows to the metering report table
+ */
+drop table ref_calculated_metering_report;
+
+create table ref_calculated_metering_report
+(
+    mpr                        bigint,
+    msn                        varchar(255),
+    account_id                 bigint distkey,
+    fuel_type                  varchar(1),
+    meterpoint_ssd             timestamp,
+    meterpoint_sed             timestamp,
+    meterpoint_status          varchar(13),
+    acc_mp_ssd                 timestamp,
+    acc_mp_sed                 timestamp,
+    acc_mp_status              varchar(13),
+    meter_status               varchar(65535),
+    meter_install_date         timestamp,
+    meter_removed_date         timestamp,
+    meter_type                 varchar(65535),
+    meter_location             varchar(65535),
+    meter_mechanism            varchar(65535),
+    num_registers              bigint,
+    num_dials                  varchar(65535),
+    ssc                        varchar(65535),
+    mop_mam                    varchar(65535),
+    mop_mam_effective_date     timestamp,
+    old_mop_mam                varchar(65535),
+    old_supplier_mop_mam       varchar(65535),
+    mex_occurred               varchar(7),
+    mex_date                   timestamp,
+    f_read_date                timestamp,
+    f_read_dc                  varchar(16),
+    f_read_other_source        varchar(65535),
+    f_read_other_status        varchar(16),
+    i_read_date                timestamp,
+    i_read_dc                  varchar(16),
+    i_read_other_source        varchar(65535),
+    i_read_other_status        varchar(16),
+    sed_read_date              timestamp,
+    sed_read_dc                varchar(16),
+    sed_read_other_source      varchar(65535),
+    sed_read_other_status      varchar(16),
+    ssd_read_date              timestamp,
+    ssd_read_dc                varchar(16),
+    ssd_read_other_source      varchar(65535),
+    ssd_read_other_status      varchar(16),
+    eac_aq_in                  varchar(7),
+    eac_aq_effective_date      timestamp,
+    supply_status              varchar(65535),
+    gas_imperial_indicator     varchar(65535),
+    gain_supplier              varchar(65535),
+    neg_state_occurred         boolean,
+    num_valid_actual_reads     bigint,
+    num_inv_actual_reads       bigint,
+    first_valid_actual         timestamp,
+    first_invalid_actual       timestamp,
+    latest_valid_actual        timestamp,
+    latest_invalid_actual      timestamp,
+    latest_invalid_actual_type varchar(16),
+    num_valid_smart_reads      bigint,
+    num_inv_smart_reads        bigint,
+    first_valid_smart          timestamp,
+    first_invalid_smart        timestamp,
+    latest_valid_smart         timestamp,
+    latest_invalid_smart       timestamp,
+    ensek_meterpoint_id        bigint,
+    ensek_meter_id             bigint,
+    etlchange                  timestamp
+)
+    diststyle key
+    sortkey (account_id, ensek_meterpoint_id, ensek_meter_id);
+
+alter table ref_calculated_metering_report
+    owner to igloo;
