@@ -15,12 +15,12 @@ select state.account_id,
        mp_elec.meter_point_id,
        mp_elec.meterpointnumber          as mpan,
        mp_elec.meterpointtype,
-       smef."device id",
-       smef."firmware version",
+       smef.deviceid,
+       smef.firmware_version,
        smef.manufacturer,
        smef.type,
-       smef."device status",
-       smef."commisioned date",
+       smef.device_status,
+       smef.commisioned_date,
        accs.billdayofmonth,
        accs.nextbilldate,
        mt_elec.meter_id,
@@ -71,13 +71,13 @@ from vw_meterpoint_live_state state
        left outer join vw_metering_report_reads_info vmri
          on mp_elec.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
        left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-         on mp_elec.meterpointnumber = smef."mpxn number" and smef."device status" <> 'InstalledNotCommissioned'
+         on mp_elec.meterpointnumber = smef.mpxn_number and smef.device_status <> 'InstalledNotCommissioned'
        left outer join vw_supply_contracts_with_occ_accs vscoa on mp_elec.account_id = vscoa.external_id
        left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
        left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
        left outer join ref_tariff_history th on vscoa.external_id = th.account_id and th.end_date is null
        left outer join vw_metering_report_psr vmrp on vscoa.external_id = vmrp.external_id
-where   vscoa.external_id = 84505
+--where   vscoa.external_id = 84505
 group by state.account_id,
          left(postcode, len(postcode) - 3),
          state.acc_stat,
@@ -88,12 +88,12 @@ group by state.account_id,
          replace(vmrp.psr,',',' ') ,
          th.tariff_name,
          mp_elec.meterpointtype,
-         smef."device id",
-         smef."firmware version",
+         smef.deviceid,
+         smef.firmware_version,
          smef.manufacturer,
          smef.type,
-         smef."device status",
-         smef."commisioned date",
+         smef.device_status,
+         smef.commisioned_date,
          mp_elec.supplystartdate,
          mp_elec.associationstartdate,
          mp_elec.issmart,
@@ -107,8 +107,7 @@ group by state.account_id,
          reg_elec.registers_tpr,
          vmri.meterreadingstatusuid,
          vmri.meterreadingtypeuid,
-         vmri.meterreadingsourceuid,
-         vmri.meterreadingdatetime
+         vmri.meterreadingsourceuid, vmri.meterreadingdatetime
 order by mp_elec.account_id, mp_elec.meter_point_id, mp_elec.supplystartdate, mt_elec.meter_id
 
 

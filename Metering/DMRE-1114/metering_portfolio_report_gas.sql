@@ -15,12 +15,12 @@ select state.account_id,
        mp_gas.meter_point_id,
        mp_gas.meterpointnumber          as mpan,
        mp_gas.meterpointtype,
-       smef."device id",
-       smef."firmware version",
+       smef.deviceid,
+       smef.firmware_version,
        smef.manufacturer,
        smef.type,
-       smef."device status",
-       smef."commisioned date",
+       smef.device_status,
+       smef.commisioned_date,
        accs.billdayofmonth,
        accs.nextbilldate,
        mt_gas.meter_id,
@@ -35,11 +35,7 @@ select state.account_id,
              when mpa_gas.attributes_attributename = 'LDZ' then mpa_gas.attributes_attributevalue
                end)                      as mpa_gas_LDZ,
        max(case
-             when mpa_gas.attributes_attributename = 'SSC' then mpa_gas.attributes_attributevalue
-               end)                      as mpa_gas_ssc,
-       max(case
-             when mta_gas.metersattributes_attributename = 'METER_LOCATION'
-                     then mta_gas.metersattributes_attributevalue
+             when mpa_gas.attributes_attributename = 'Gas_Meter_Location_Code' then mpa_gas.attributes_attributevalue
                end)                      as mta_gas_meter_loc_code,
        max(case
              when mpa_gas.attributes_attributename = 'MeterMakeAndModel'
@@ -79,7 +75,7 @@ from vw_meterpoint_live_state state
        left outer join vw_metering_report_reads_info vmri
          on mp_gas.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
        left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-         on mp_gas.meterpointnumber = smef."mpxn number" and smef."device status" <> 'InstalledNotCommissioned'
+         on mp_gas.meterpointnumber = smef.mpxn_number and smef.device_status <> 'InstalledNotCommissioned'
        left outer join vw_supply_contracts_with_occ_accs vscoa on mp_gas.account_id = vscoa.external_id
        left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
        left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
@@ -96,12 +92,12 @@ group by state.account_id,
          replace(vmrp.psr,',',' ') ,
          th.tariff_name,
          mp_gas.meterpointtype,
-         smef."device id",
-         smef."firmware version",
+         smef.deviceid,
+         smef.firmware_version,
          smef.manufacturer,
          smef.type,
-         smef."device status",
-         smef."commisioned date",
+         smef.device_status,
+         smef.commisioned_date,
          mp_gas.supplystartdate,
          mp_gas.associationstartdate,
          mp_gas.issmart,

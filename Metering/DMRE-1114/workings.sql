@@ -55,10 +55,18 @@ where account_id = 84505
 select * from ref_meterpoints_attributes
 where account_id = 84505
 
+select * from ref_meterpoints_attributes
+where account_id = 124423
+
+
 
 select *
 from ref_meters_attributes
 where account_id = 84505
+
+select *
+from ref_meters_attributes
+where account_id = 124423
 
 select * from aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
 where smef."mpxn number" =  2000020479229
