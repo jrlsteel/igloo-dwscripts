@@ -141,8 +141,12 @@ where error_code in ('LIVE_ENSEK_MISSING', 'LIVE_MISMATCH',
                      'FINAL_ENSEK_MISSING', 'FINAL_MISMATCH');
 
 
-select error_code, count(*) as num_records, count(distinct account_id) as num_accounts
-from temp_tariffs_diffs
+select error_code,
+       count(*)                           as num_records,
+       count(distinct ttd.account_id)     as num_accounts,
+       count(distinct bs_accs.account_id) as num_bs_accs
+from temp_tariffs_diffs ttd
+         left join temp_account_list bs_accs on ttd.account_id = bs_accs.account_id
 group by error_code
 order by count(*) desc
 
@@ -285,3 +289,30 @@ where account_id = 54977
 select *
 from temp_tariffs_diffs
 where error_code = 'FINAL_MISMATCH'
+
+create table temp_account_list
+(
+    account_id bigint
+)
+
+select count(account_id), count(distinct account_id)
+from temp_account_list
+;
+
+select ttd.account_id,
+       fuel,
+       bs_accs.account_id is not null as billing_suspended,
+       ttd.ens_trf_start_date,
+       ttd.ens_trf_end_date,
+       gas_ssd,
+       gas_ed,
+       elec_ssd,
+       elec_ed
+from temp_tariffs_diffs ttd
+         left join temp_account_list bs_accs on ttd.account_id = bs_accs.account_id
+         left join ref_calculated_daily_customer_file dcf on dcf.account_id = ttd.account_id
+where ttd.error_code = 'LIVE_ENSEK_MISSING'
+order by account_id
+
+
+select * from vw_tariff_checks where right(error_code, 5) != 'Valid'

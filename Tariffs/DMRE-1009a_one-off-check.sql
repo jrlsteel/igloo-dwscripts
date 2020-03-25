@@ -131,7 +131,7 @@ recent elec tariff to be active
 */
 
 
-create view vw_igloo_ensek_tariff_diffs as
+create or replace view vw_igloo_ensek_tariff_diffs as
 select nvl(igl_trf.account_id, ens_trf.account_id, dcf.account_id) as account_id,
        dcf.account_status,
        dcf.elec_reg_status,
@@ -200,3 +200,9 @@ where elec_ssd < signup_start_date
   and signup_start_date < gas_ssd
   and gas_ssd < billing_start_date
 
+
+select field,
+       count(*)
+
+from temp_tariffs_diffs
+group by field

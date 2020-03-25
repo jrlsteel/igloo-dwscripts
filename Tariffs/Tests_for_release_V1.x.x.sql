@@ -96,3 +96,26 @@ select error_code, count(*) as num_records, count(distinct account_id) as num_ac
 from vw_tariff_checks
 group by error_code
 order by count(*) desc
+
+select *
+from ref_tariff_history_elec_ur
+where account_id = 128242
+
+
+select distinct account_id
+from vw_tariff_checks
+where error_code in ('LIVE_ENSEK_MISSING', 'LIVE_MISMATCH',
+                     'PENDING_ENSEK_MISSING', 'PENDING_MISMATCH')
+
+select *
+from ref_meterpoints_audit
+where account_id = 128242
+
+select dcf.account_id, gsp, elec_ssd, gas_ssd, elec_ed, gas_ed
+from ref_calculated_daily_customer_file dcf
+left join vw_tariff_checks tc on dcf.account_id = tc.account_id
+where tc.error_code in ('PENDING_ENSEK_MISSING', 'LIVE_MISMATCH', 'PENDING_MISMATCH')
+
+select * from ref_tariffs where end_date is null-- and gsp_ldz = '_G'
+
+select * from ref_meterpoints_attributes where account_id = 14134
