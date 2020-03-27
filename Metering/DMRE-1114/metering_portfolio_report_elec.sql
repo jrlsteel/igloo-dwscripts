@@ -3,12 +3,13 @@ create table ref_calculated_metering_portfolio_elec_report as
   select state.account_id,
          left(postcode, len(postcode) - 3) as Postcode,
          state.acc_stat,
+         cdcf.supply_type,
          vmrc.gain_type,
          vmrc.gain_date,
          vmrc.loss_type,
          vmrc.loss_date,
          mp_elec.supplystartdate,
-         mp_elec.associationstartdate,
+         mp_elec.associationstartdate as accmeterpointstartdate,
          state.aed                         as associationenddate,
          state.sed                         as supplyenddate,
          state.home_move_in,
@@ -75,7 +76,7 @@ create table ref_calculated_metering_portfolio_elec_report as
          left outer join vw_metering_report_reads_info vmri
            on mp_elec.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
          left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-           on mp_elec.meterpointnumber = smef.mpxn_number and smef.device_status <> 'InstalledNotCommissioned'
+           on mp_elec.meterpointnumber = smef.mpxn_number --and smef.device_status <> 'InstalledNotCommissioned'
          left outer join vw_supply_contracts_with_occ_accs vscoa on mp_elec.account_id = vscoa.external_id
          left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
          left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
@@ -83,10 +84,12 @@ create table ref_calculated_metering_portfolio_elec_report as
          left outer join vw_metering_report_psr vmrp on vscoa.external_id = vmrp.external_id
          left outer join vw_metering_report_cot vmrc
            on state.account_id = vmrc.account_id and vmrc.meter_point_id = mp_elec.meter_point_id
+         left outer join ref_calculated_daily_customer_file cdcf on state.account_id = cdcf.account_id
       --where   vscoa.external_id = 84505
   group by state.account_id,
            left(postcode, len(postcode) - 3),
            state.acc_stat,
+           cdcf.supply_type,
            vmrc.gain_date,
            vmrc.gain_type,
            vmrc.loss_date,
@@ -116,8 +119,7 @@ create table ref_calculated_metering_portfolio_elec_report as
            reg_elec.register_id,
            reg_elec.registers_tpr,
            vmri.meterreadingstatusuid,
-           vmri.meterreadingtypeuid,
-           vmri.meterreadingsourceuid, vmri.meterreadingdatetime
+           vmri.meterreadingtypeuid, vmri.meterreadingsourceuid, vmri.meterreadingdatetime
   order by mp_elec.account_id, mp_elec.meter_point_id, mp_elec.supplystartdate, mt_elec.meter_id
 
 
