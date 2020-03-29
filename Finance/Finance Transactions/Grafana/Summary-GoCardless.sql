@@ -32,7 +32,7 @@
       where accountid is not null or createddate is not null or transamount is not null
         --and lower(TransactionTypeName) = 'payment'
         and lower(AccountDesc) = 'card provider cash'
-       --and to_date(substring(replace(createddate, ' ', ''), 1, 10), 'YYYY-MM-DD') between '2020-01-01' and '2020-02-01'
+        and to_date(substring(replace(createddate, ' ', ''), 1, 10), 'YYYY-MM-DD') between '$StartDate' and '$EndDate'
       )
 
 ,  cte_payments_summ as (
@@ -113,3 +113,44 @@
            gc.created_at between dateadd(day, -3, ensek.CreatedDate) and dateadd(day, 3, ensek.CreatedDate) --- -3 0r +3 days ---
     WHERE gc.created_at between '$StartDate' and '$EndDate'
     )
+
+, cte_ensek_debit_credit as (
+--- Ensek Tab ---
+select
+ ensek.CreatedDate,
+  SUM(CASE WHEN TransAmount::float > 0 THEN TransAmount::float ELSE null END) as Debits,
+  SUM(CASE WHEN TransAmount::float < 0 THEN TransAmount::float ELSE null END) as Credits
+from  cte_ensek ensek
+Group  By ensek.CreatedDate
+)
+
+
+, cte_date as (
+       select distinct CreatedDate as date_datetime
+          from aws_fin_stage1_extracts.fin_sales_ledger_all_time
+          where  CreatedDate between '$StartDate' and '$EndDate'
+      )
+
+
+select
+cd.date_datetime as gc_date,
+case when pay.Payments > ensek.Debits then pay.Payments - ensek.Debits else null end as "In GC not in Ensek" ,
+case when pay.Payments < ensek.Debits then ensek.Debits - pay.Payments else null end as "In Ensek not in GC"
+from
+cte_date cd
+left join
+    (
+      select
+      gc.created_at,
+      sum(gc."payments.amount"::float) as Payments
+      from
+      cte_payments gc
+      group by
+      gc.created_at
+    ) pay
+ on pay.created_at = cd.date_datetime
+left join
+    cte_ensek_debit_credit ensek
+ on ensek.CreatedDate = cd.date_datetime
+--where cd.date_datetime between '$StartDate' and '$EndDate'
+;
