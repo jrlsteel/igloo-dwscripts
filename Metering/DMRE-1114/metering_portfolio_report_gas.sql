@@ -3,13 +3,16 @@ create table ref_calculated_metering_portfolio_gas_report as
   select state.account_id,
          left(postcode, len(postcode) - 3) as Postcode,
          state.acc_stat,
-         cdcf.supply_type,
-         vmrc.gain_type,
+         cdcf.supply_type, vmrc.gain_type,
          vmrc.gain_date,
          vmrc.loss_type,
          vmrc.loss_date,
+         case
+           when (mt_gas.installeddate > dateadd(day, 2, mp_gas.supplystartdate)) and
+                mt_gas.installeddate > '2019-08-01 00:00:00.000000' then 'IglooInstalled'
+           else 'NonIglooInstalled' end    as InstalledBy,
          mp_gas.supplystartdate,
-         mp_gas.associationstartdate as accmeterpointstartdate,
+         mp_gas.associationstartdate       as accmeterpointstartdate,
          state.aed                         as associationenddate,
          state.sed                         as supplyenddate,
          state.home_move_in,
@@ -21,11 +24,11 @@ create table ref_calculated_metering_portfolio_gas_report as
          mp_gas.meterpointnumber           as mprn,
          mp_gas.meterpointtype,
          smef.deviceid,
-         smef.firmware_version,
+         smef."firmware version",
          smef.manufacturer,
          smef.type,
-         smef.device_status,
-         smef.commisioned_date,
+         smef."device status",
+         smef."commisioned date",
          accs.billdayofmonth,
          accs.nextbilldate,
          mt_gas.meter_id,
@@ -81,7 +84,7 @@ create table ref_calculated_metering_portfolio_gas_report as
          left outer join vw_metering_report_reads_info vmri
            on mp_gas.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
          left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-           on mp_gas.meterpointnumber = smef.mpxn_number --and smef.device_status <> 'InstalledNotCommissioned'
+           on mp_gas.meterpointnumber = smef."mpxn number" --and smef.device_status <> 'InstalledNotCommissioned'
          left outer join vw_supply_contracts_with_occ_accs vscoa on mp_gas.account_id = vscoa.external_id
          left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
          left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
@@ -99,6 +102,10 @@ create table ref_calculated_metering_portfolio_gas_report as
            vmrc.gain_date,
            vmrc.loss_type,
            vmrc.loss_date,
+           case
+             when (mt_gas.installeddate > dateadd(day, 2, mp_gas.supplystartdate)) and
+                  mt_gas.installeddate > '2019-08-01 00:00:00.000000' then 'IglooInstalled'
+             else 'NonIglooInstalled' end,
            state.aed,
            state.sed,
            state.home_move_in, mp_gas.account_id, mp_gas.meter_point_id, mp_gas.meterpointnumber,
@@ -107,21 +114,19 @@ create table ref_calculated_metering_portfolio_gas_report as
            th.tariff_name,
            mp_gas.meterpointtype,
            smef.deviceid,
-           smef.firmware_version,
+           smef."firmware version",
            smef.manufacturer,
            smef.type,
-           smef.device_status,
-           smef.commisioned_date,
+           smef."device status",
+           smef."commisioned date",
            mp_gas.supplystartdate,
            mp_gas.associationstartdate,
            mp_gas.issmart,
            mp_gas.issmartcommunicating,
            accs.billdayofmonth,
-           accs.nextbilldate,
-           mt_gas.meter_id, mt_gas.meterserialnumber, mt_gas.installeddate,
+           accs.nextbilldate,mt_gas.meter_id, mt_gas.meterserialnumber, mt_gas.installeddate,
            reg_elec.register_id, vmri.meterreadingstatusuid,
-           vmri.meterreadingtypeuid,
-           vmri.meterreadingsourceuid,
+           vmri.meterreadingtypeuid,vmri.meterreadingsourceuid,
            vmri.meterreadingdatetime
   order by mp_gas.account_id, mp_gas.meter_point_id, mp_gas.supplystartdate, mt_gas.meter_id
 
