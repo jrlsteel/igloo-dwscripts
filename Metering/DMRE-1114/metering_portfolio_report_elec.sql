@@ -8,8 +8,12 @@ create table ref_calculated_metering_portfolio_elec_report as
          vmrc.gain_date,
          vmrc.loss_type,
          vmrc.loss_date,
+         case
+           when (mt_elec.installeddate > dateadd(day, 2, mp_elec.supplystartdate)) and
+                mt_elec.installeddate > '2019-08-01 00:00:00.000000' then 'IglooInstalled'
+           else 'NonIglooInstalled' end    as InstalledBy,
          mp_elec.supplystartdate,
-         mp_elec.associationstartdate as accmeterpointstartdate,
+         mp_elec.associationstartdate      as accmeterpointstartdate,
          state.aed                         as associationenddate,
          state.sed                         as supplyenddate,
          state.home_move_in,
@@ -21,11 +25,11 @@ create table ref_calculated_metering_portfolio_elec_report as
          mp_elec.meterpointnumber          as mpan,
          mp_elec.meterpointtype,
          smef.deviceid,
-         smef.firmware_version,
+         smef."firmware version",
          smef.manufacturer,
          smef.type,
-         smef.device_status,
-         smef.commisioned_date,
+         smef."device status",
+         smef."commisioned date",
          accs.billdayofmonth,
          accs.nextbilldate,
          mt_elec.meter_id,
@@ -76,7 +80,7 @@ create table ref_calculated_metering_portfolio_elec_report as
          left outer join vw_metering_report_reads_info vmri
            on mp_elec.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
          left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-           on mp_elec.meterpointnumber = smef.mpxn_number --and smef.device_status <> 'InstalledNotCommissioned'
+           on mp_elec.meterpointnumber = smef."mpxn number" --and smef.device_status <> 'InstalledNotCommissioned'
          left outer join vw_supply_contracts_with_occ_accs vscoa on mp_elec.account_id = vscoa.external_id
          left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
          left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
@@ -94,6 +98,10 @@ create table ref_calculated_metering_portfolio_elec_report as
            vmrc.gain_type,
            vmrc.loss_date,
            vmrc.loss_type,
+           case
+             when (mt_elec.installeddate > dateadd(day, 2, mp_elec.supplystartdate)) and
+                  mt_elec.installeddate > '2019-08-01 00:00:00.000000' then 'IglooInstalled'
+             else 'NonIglooInstalled' end,
            state.aed,
            state.sed,
            state.home_move_in, mp_elec.account_id, mp_elec.meter_point_id, mp_elec.meterpointnumber,
@@ -102,11 +110,11 @@ create table ref_calculated_metering_portfolio_elec_report as
            th.tariff_name,
            mp_elec.meterpointtype,
            smef.deviceid,
-           smef.firmware_version,
+           smef."firmware version",
            smef.manufacturer,
            smef.type,
-           smef.device_status,
-           smef.commisioned_date,
+           smef."device status",
+           smef."commisioned date",
            mp_elec.supplystartdate,
            mp_elec.associationstartdate,
            mp_elec.issmart,
@@ -115,11 +123,8 @@ create table ref_calculated_metering_portfolio_elec_report as
            accs.nextbilldate,
            mt_elec.meter_id,
            mt_elec.meterserialnumber,
-           mt_elec.installeddate,
-           reg_elec.register_id,
-           reg_elec.registers_tpr,
-           vmri.meterreadingstatusuid,
-           vmri.meterreadingtypeuid, vmri.meterreadingsourceuid, vmri.meterreadingdatetime
+           mt_elec.installeddate,reg_elec.register_id, reg_elec.registers_tpr, vmri.meterreadingstatusuid, vmri.meterreadingtypeuid,
+           vmri.meterreadingsourceuid, vmri.meterreadingdatetime
   order by mp_elec.account_id, mp_elec.meter_point_id, mp_elec.supplystartdate, mt_elec.meter_id
 
 
