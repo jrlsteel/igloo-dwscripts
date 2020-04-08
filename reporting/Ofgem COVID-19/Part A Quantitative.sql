@@ -3,22 +3,23 @@ with account_figures as (
                                '2020-04-05 23:59:59'::timestamp as sunday)
     select dcf.account_id,
            up.user_id,
+           dcf.account_status != 'Cancelled' and
            dcf.acc_ssd <= date_range.sunday and
-           nvl(acc_ed, getdate()) >= date_range.sunday                          as acc_live,
-           dcf.latest_bill_date between date_range.monday and date_range.sunday as bill_in_window,
-           attr_psr.attribute_custom_value is not null                          as psr,
+           nvl(acc_ed, getdate()) >= date_range.sunday                                                 as acc_live,
+           nvl(dcf.latest_bill_date, getdate() + 1000) between date_range.monday and date_range.sunday as bill_in_window,
+           attr_psr.attribute_custom_value is not null                                                 as psr,
            ((num_elec_mpns * vlr.elec_sc * 365) + (eac_igloo_ca * vlr.elec_ur)) * 0.01 * 1.05 /
-           12                                                                   as elec_monthly_usage_sterling,
+           12                                                                                          as elec_monthly_usage_sterling,
            ((num_gas_mpns * vlr.gas_sc * 365) + (aq_igloo_ca * vlr.gas_ur)) * 0.01 * 1.05 /
-           12                                                                   as gas_monthly_usage_sterling,
+           12                                                                                          as gas_monthly_usage_sterling,
            nvl(elec_monthly_usage_sterling, 0) +
-           nvl(gas_monthly_usage_sterling, 0)                                   as monthly_usage_sterling,
-           nvl(cp.num_declined_payments, 0)                                     as num_declined_payments,
-           nvl(gc_info.has_active_subscriptions::int, 0)                        as has_active_subscription,
-           nvl(gc_info.subscription_amount, 0)                                  as current_dd,
-           nvl(gc_info.dd_fail, false)                                          as dd_failure,
-           nvl(man_canc_in_window, false)                                       as man_canc_in_window,
-           nvl(sub_updated_in_window, false)                                    as dd_amended
+           nvl(gas_monthly_usage_sterling, 0)                                                          as monthly_usage_sterling,
+           nvl(cp.num_declined_payments, 0)                                                            as num_declined_payments,
+           nvl(gc_info.has_active_subscriptions::int, 0)                                               as has_active_subscription,
+           nvl(gc_info.subscription_amount, 0)                                                         as current_dd,
+           nvl(gc_info.dd_fail, false)                                                                 as dd_failure,
+           nvl(man_canc_in_window and (has_active_subscription = 0), false)                            as man_canc_in_window,
+           nvl(sub_updated_in_window, false)                                                           as dd_amended
     from ref_calculated_daily_customer_file dcf
              left join date_range on true
              left join ref_cdb_supply_contracts sc on dcf.account_id = sc.external_id
@@ -301,3 +302,19 @@ where resource_type = 'subscriptions'
   and action = 'amended'
   and created_at between '2020-02-17' and '2020-02-23'
 --   and created_at between '2020-03-30 00:00:00'::timestamp-14 and '2020-04-05 23:59:59'::timestamp-14
+
+select *
+from ref_cdb_supply_contracts
+where external_id in (92270, 124407, 117810)
+
+
+select max(created_at)
+from aws_fin_stage1_extracts.fin_go_cardless_api_events
+where resource_type = 'subscriptions'
+  and action = 'amended'
+
+
+select max(created_at)
+from aws_fin_stage1_extracts.fin_go_cardless_api_events
+where resource_type = 'mandates'
+  and action = 'cancelled'
