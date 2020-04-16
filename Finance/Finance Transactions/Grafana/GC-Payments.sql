@@ -1,32 +1,33 @@
-; with cte_payments as (
-
+; with cte_refunds_gcpaym as (
        select
-        ensekAccountId  as ensekAccountId,
-        to_date(substring(charge_date, 1, 10), 'YYYY-MM_DD') as created_at,
-        trunc(amount::float, 2) as "payments.amount",
-        customers_id  as "customers.id"
-        from public.vw_fin_go_cardless_api_payments
-      )
-
-, cte_ensek as (
-        select
-        replace(accountid, ' ', '') as AccountId,
-        to_date(substring(replace(createddate, ' ', ''), 1, 10), 'YYYY-MM-DD') as CreatedDate,
-        trunc(replace(transamount, ' ', '')::float, 2) as TransAmount
-        from aws_fin_stage1_extracts.fin_sales_ledger_all_time
-         where accountid is not null or createddate is not null or transamount is not null
-         --and lower(TransactionTypeName) = 'payment'
-        and lower(AccountDesc) = 'card provider cash'
+         *
+        from public.vw_fin_trans_refunds ref
+       where ref.created_at between '$StartDate' and '$EndDate'
 
       )
 
-, cte_ensek_summ as (
+,  cte_payments_gcpaym as (
+       select
+        *
+        from public.vw_fin_trans_payments py
+       where py.created_at between '$StartDate' and '$EndDate'
+
+      )
+
+, cte_ensek_gcpaym as (
+        select *
+        from public.vw_fin_trans_ensek
+      where (accountid is not null or createddate is not null or transamount is not null)
+        and createddate between dateadd(day, 2, '$StartDate') and  dateadd(day, -2, '$EndDate')
+      )
+
+, cte_ensek_summ_gcpaym as (
         select
         AccountId,
         CreatedDate,
         TransAmount,
         count(*) as Countif
-        from cte_ensek
+        from cte_ensek_gcpaym
        group by
         AccountId,
         CreatedDate,
@@ -34,18 +35,22 @@
       )
 
 
-
+, cte_gc_payments_gcpaym as (
 select
  gc.ensekAccountId ,
  gc.created_at,
  gc."payments.amount",
  --ensek.TransAmount,
  ensek.Countif
-from cte_payments gc
-left join cte_ensek_summ ensek
+from cte_payments_gcpaym gc
+left join cte_ensek_summ_gcpaym ensek
     on gc.ensekAccountId = ensek.AccountId and
        gc."payments.amount" = ensek.TransAmount and
        --gc.created_at = ensek.CreatedDate
-       gc.created_at between dateadd(day, -3, ensek.CreatedDate) and dateadd(day, 3, ensek.CreatedDate) --- -3 0r +3 days ---
+       ensek.CreatedDate between dateadd(day, -3, gc.created_at) and dateadd(day, 3, gc.created_at) --- -3 0r +3 days ---
 WHERE gc.created_at between '$StartDate' and '$EndDate'
+)
+
+
+select * from cte_gc_payments_gcpaym order by 1
 ;
