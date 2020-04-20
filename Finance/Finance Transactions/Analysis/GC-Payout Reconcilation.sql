@@ -1,0 +1,352 @@
+
+--- Current Script is for Feb 2020 -------------
+
+; with cte_payouts as (
+select * from aws_fin_stage1_extracts.fin_go_cardless_api_payouts
+where
+  substring (created_at, 1, 10) between '2020-02-01' and '2020-02-29'
+      )
+
+
+, cte_payments as (
+---- Payments -----
+
+select distinct events.id,
+                events.created_at                       as events_created_at,
+                events.resource_type,
+                events.action,
+                events.customer_notifications,
+                events.cause,
+                events.description,
+                events.origin,
+                events.reason_code,
+                events.scheme,
+                events.will_attempt_retry,
+                events.mandate                          as events_mandate,
+                events.new_customer_bank_account,
+                events.new_mandate,
+                events.organisation,
+                events.parent_event,
+                events.payment,
+                events.payout,
+                events.previous_customer_bank_account,
+                events.refund,
+                events.subscription,
+                payments.id                             as paymentID,
+                payments.amount :: float / 100          as amount,
+                payments.amount_refunded :: float / 100 as amount_refunded,
+                payments.created_at,
+                payments.charge_date,
+                payments.status,
+                man.mandate_id,
+                payments.description,
+                payments.reference,
+                payments.payout,
+                payouts.payout_id ,
+                client.client_id                        as customers_id,
+                lkp.igl_acc_id                          as ensekAccountId
+from (select *
+      from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
+      where events_a.resource_type = 'payouts'
+        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29') events_payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on payments.id = events.payment
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payouts payouts
+         on payouts.payout_id = events_payout.payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_mandates man
+         on man.mandate_id = payments.mandate --- goCardless CLIENTS ---
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_clients client
+         on client.client_id = man.customerid --- ref_cdb_users ---
+       left join public.vw_gocardless_customer_id_mapping lkp on lkp.client_id = client.client_id
+where events.action = 'paid_out'
+      )
+
+
+
+
+, cte_refundsSettled as (
+---- Event-Refunds RefundSettled -----
+
+select distinct events.id,
+                events.created_at             as events_created_at,
+                events.resource_type,
+                events.action,
+                events.customer_notifications,
+                events.cause,
+                events.description,
+                events.origin,
+                events.reason_code,
+                events.scheme,
+                events.will_attempt_retry,
+                events.mandate                as events_mandate,
+                events.new_customer_bank_account,
+                events.new_mandate,
+                events.organisation,
+                events.parent_event,
+                events.payment,
+                events.payout,
+                events.previous_customer_bank_account,
+                events.refund,
+                events.subscription,
+                refunds.id                    as refundID,
+                refunds.amount :: float / 100 as amount,
+                refunds.payment               as paymentID,
+                refunds.created_at            as refunds_created_at,
+                payments.status               as payment_status,
+                payments.payout               as payoutID,
+                payouts.payout_id,
+                man.mandate_id,
+                client.client_id              as customers_id,
+                lkp.igl_acc_id                as ensekAccountId
+from (select *
+      from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
+      where events_a.resource_type = 'payouts'
+        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29') events_payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_refunds refunds on events.refund = refunds.id
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on refunds.payment = payments.id
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_payouts payouts on payouts.payout_id = events_payout.payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_mandates man
+         on man.mandate_id = refunds.mandate --- goCardless CLIENTS ---
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_clients client
+         on client.client_id = man.customerid --- ref_cdb_users ---
+       left join public.vw_gocardless_customer_id_mapping lkp on lkp.client_id = client.client_id
+where events.action = 'refund_settled'
+      )
+
+
+
+
+
+, cte_lateFailure as (
+---- Event-Payments late_failure_settled-----
+
+select distinct events.id,
+                events.created_at                       as events_created_at,
+                events.resource_type,
+                events.action,
+                events.customer_notifications,
+                events.cause,
+                events.description,
+                events.origin,
+                events.reason_code,
+                events.scheme,
+                events.will_attempt_retry,
+                events.mandate                          as events_mandate,
+                events.new_customer_bank_account,
+                events.new_mandate,
+                events.organisation,
+                events.parent_event,
+                events.payment,
+                events.payout,
+                events.previous_customer_bank_account,
+                events.refund,
+                events.subscription,
+                payments.id                             as paymentID,
+                payments.amount :: float / 100          as amount,
+                payments.amount_refunded :: float / 100 as amount_refunded,
+                payments.created_at,
+                payments.charge_date,
+                payments.status,
+                man.mandate_id,
+                payments.description,
+                payments.reference,
+                payments.payout,
+                payouts.payout_id,
+                client.client_id                        as customers_id,
+                lkp.igl_acc_id                          as ensekAccountId
+from (select *
+      from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
+      where events_a.resource_type = 'payouts'
+        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29') events_payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on payments.id = events.payment
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payouts payouts
+         on payouts.payout_id = events_payout.payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_mandates man
+         on man.mandate_id = payments.mandate --- goCardless CLIENTS ---
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_clients client
+         on client.client_id = man.customerid --- ref_cdb_users ---
+       left join public.vw_gocardless_customer_id_mapping lkp on lkp.client_id = client.client_id
+where events.action = 'late_failure_settled'
+      )
+
+
+
+
+, cte_chargeBack as (
+---- Event-Payments chargeback_settled-----
+
+select distinct events.id,
+                events.created_at                       as events_created_at,
+                events.resource_type,
+                events.action,
+                events.customer_notifications,
+                events.cause,
+                events.description,
+                events.origin,
+                events.reason_code,
+                events.scheme,
+                events.will_attempt_retry,
+                events.mandate                          as events_mandate,
+                events.new_customer_bank_account,
+                events.new_mandate,
+                events.organisation,
+                events.parent_event,
+                events.payment,
+                events.payout,
+                events.previous_customer_bank_account,
+                events.refund,
+                events.subscription,
+                payments.id                             as paymentID,
+                payments.amount :: float / 100          as amount,
+                payments.amount_refunded :: float / 100 as amount_refunded,
+                payments.created_at,
+                payments.charge_date,
+                payments.status,
+                man.mandate_id,
+                payments.description,
+                payments.reference,
+                payments.payout,
+                payouts.payout_id,
+                client.client_id                        as customers_id,
+                lkp.igl_acc_id                          as ensekAccountId
+from (select *
+      from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
+      where events_a.resource_type = 'payouts'
+        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29') events_payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on payments.id = events.payment
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_payouts payouts
+         on payouts.payout_id = events_payout.payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_mandates man
+         on man.mandate_id = payments.mandate --- goCardless CLIENTS ---
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_clients client
+         on client.client_id = man.customerid --- ref_cdb_users ---
+       left join public.vw_gocardless_customer_id_mapping lkp on lkp.client_id = client.client_id
+where events.action = 'chargeback_settled'
+      )
+
+
+
+
+, cte_fundsReturned as (
+---- Event-Refunds -- FundsReturned -----
+
+select distinct events.id,
+                events.created_at             as events_created_at,
+                events.resource_type,
+                events.action,
+                events.customer_notifications,
+                events.cause,
+                events.description,
+                events.origin,
+                events.reason_code,
+                events.scheme,
+                events.will_attempt_retry,
+                events.mandate                as events_mandate,
+                events.new_customer_bank_account,
+                events.new_mandate,
+                events.organisation,
+                events.parent_event,
+                events.payment,
+                events.payout,
+                events.previous_customer_bank_account,
+                events.refund,
+                events.subscription,
+                refunds.id                    as refundID,
+                refunds.amount :: float / 100 as amount,
+                refunds.payment               as paymentID,
+                refunds.created_at            as refunds_created_at,
+                payments.status               as payment_status,
+                payments.payout               as payoutID,
+                payouts.payout_id,
+                man.mandate_id,
+                client.client_id              as customers_id,
+                lkp.igl_acc_id                as ensekAccountId
+from (select *
+      from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
+      where events_a.resource_type = 'payouts'
+        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29') events_payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_refunds refunds on events.refund = refunds.id
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on refunds.payment = payments.id
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_payouts payouts on payouts.payout_id = events_payout.payout
+       inner join aws_fin_stage1_extracts.fin_go_cardless_api_mandates man
+         on man.mandate_id = refunds.mandate --- goCardless CLIENTS ---
+       left join aws_fin_stage1_extracts.fin_go_cardless_api_clients client
+         on client.client_id = man.customerid --- ref_cdb_users ---
+       left join public.vw_gocardless_customer_id_mapping lkp on lkp.client_id = client.client_id
+where events.action = 'funds_returned'
+      )
+
+
+, cte_summary_1 as (select payouts.payout_id,
+                           substring(created_at, 1, 10)                                   payouts_created_date,
+                           payouts.created_at,
+                           payouts.amount :: float / 100                               as payoutAmount,
+                           trunc(round(payments.payments_amount :: float, 2), 2)       as payments_amount,
+                           trunc(round(refunds.refunds_amount :: float, 2), 2)         as refunds_amount,
+                           trunc(round(lateFailure.lateFailure_amount :: float, 2), 2) as lateFailure_amount,
+                           trunc(round(chargeBack.chargeBack_amount :: float, 2), 2)   as chargeBack_amount ,
+                           trunc(round(fundsReturned.fundsReturned_amount :: float, 2), 2)   as fundsReturned_amount
+                    from cte_payouts payouts
+                           left join (select payout_id, sum(amount) as payments_amount
+                                      from cte_payments
+                                      group by payout_id) payments on payouts.payout_id = payments.payout_id
+                           left join (select payout_id, sum(amount) as refunds_amount
+                                      from cte_refundsSettled
+                                      group by payout_id) refunds on payouts.payout_id = refunds.payout_id
+                           left join (select payout_id, sum(amount) as lateFailure_amount
+                                      from cte_lateFailure
+                                      group by payout_id) lateFailure on payouts.payout_id = lateFailure.payout_id
+                           left join (select payout_id, sum(amount) as chargeBack_amount
+                                      from cte_chargeBack
+                                      group by payout_id) chargeBack on payouts.payout_id = chargeBack.payout_id
+                           left join (select payout_id, sum(amount) as fundsReturned_amount
+                                      from cte_fundsReturned
+                                      group by payout_id) fundsReturned on payouts.payout_id = fundsReturned.payout_id
+                    order by 1
+      )
+
+
+, cte_output as (
+        --- OUTPUT -----
+        select stg.*,
+                trunc(PayoutReconcilation, 0) ,
+               CASE
+                 WHEN trunc(payoutAmount,0) = trunc(PayoutReconcilation, 0)  then 0
+                 ELSE 1
+                   END as discrepancyFlag
+        from (select *,
+                         (nvl(payments_amount,0.0) + nvl(fundsReturned_amount, 0.0)  ) -
+                        (nvl(refunds_amount, 0.0) + nvl(lateFailure_amount, 0.0) +
+                            nvl(chargeBack_amount, 0.0)  ) as PayoutReconcilation
+              from cte_summary_1) stg
+      )
+
+
+select *
+  from cte_output
+---- CHECK FOR DISCREPANCY -----
+----where discrepancyFlag = 1
+;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

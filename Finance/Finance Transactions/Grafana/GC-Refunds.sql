@@ -1,35 +1,33 @@
-; with cte_refunds as (
+; with cte_refunds_gcrefunds as (
        select
-         ref.customers_id
-        , ref.ensekaccountid
-        , to_date(substring(ref.created_at, 1, 10), 'YYYY-MM-DD') as created_at
-        , ref.arrival_date
-        , ref.status
-        , trunc((ref.refund_amount * -1)::float, 2) as refund_amount
-        , trunc((ref.amount_refunded * -1)::float, 2) as amount_refunded
-        from public.vw_fin_go_cardless_api_refunds ref
-       WHERE to_date(substring(ref.created_at, 1, 10), 'YYYY-MM-DD') between '$StartDate' and '$EndDate'
-      )
-
-, cte_ensek as (
-        select
-        replace(accountid, ' ', '') as AccountId,
-        to_date(substring(replace(createddate, ' ', ''), 1, 10), 'YYYY-MM-DD') as CreatedDate,
-        trunc(replace(transamount, ' ', '')::float, 2)  as TransAmount
-        from aws_fin_stage1_extracts.fin_sales_ledger_all_time
-         where accountid is not null or createddate is not null or transamount is not null
-         --and lower(TransactionTypeName) = 'payment'
-        and lower(AccountDesc) = 'card provider cash'
+         *
+        from public.vw_fin_trans_refunds ref
+       where ref.created_at between '$StartDate' and '$EndDate'
 
       )
 
-, cte_ensek_summ as (
+,  cte_payments_gcrefunds as (
+       select
+        *
+        from public.vw_fin_trans_payments py
+       where py.created_at between '$StartDate' and '$EndDate'
+
+      )
+
+, cte_ensek_gcrefunds as (
+        select *
+        from public.vw_fin_trans_ensek
+      where (accountid is not null or createddate is not null or transamount is not null)
+        and createddate between dateadd(day, 2, '$StartDate') and  dateadd(day, -2, '$EndDate')
+      )
+
+, cte_ensek_summ_gcrefunds as (
         select
         AccountId,
         CreatedDate,
         TransAmount,
         count(*) as Countif
-        from cte_ensek
+        from cte_ensek_gcrefunds
        WHERE CreatedDate between '$StartDate' and '$EndDate'
        group by
         AccountId,
@@ -38,7 +36,7 @@
       )
 
 
-
+, cte_gc_refunds_gcrefunds as (
 select
  gc.customers_id
 , gc.ensekaccountid
@@ -47,8 +45,11 @@ select
 , gc.status
 , gc.refund_amount
 , ensek.Countif
-from cte_refunds gc
-left join cte_ensek_summ ensek
+from cte_refunds_gcrefunds gc
+left join cte_ensek_summ_gcrefunds ensek
     on gc.ensekAccountId = ensek.AccountId and
        gc.refund_amount = ensek.TransAmount
+  )
+
+select * from cte_gc_refunds_gcrefunds order by 1
 ;
