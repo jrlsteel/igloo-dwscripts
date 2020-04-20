@@ -1,7 +1,21 @@
-select account_portfolio_summaries.*
-
+with weekly_portfolio_stats as (
+    select metric_type_id,
+           date_trunc('week', timespan_start)     week_commencing,
+           sum(metric_value::double precision) as total
+    from ref_portfolio_metrics
+    where metric_type_id between 1 and 6
+    group by metric_type_id, week_commencing
+)
+select account_portfolio_summaries.*,
+       zendesk_tickets.total::int                               as num_zendesk_tickets,
+       round(zendesk_covid.total * 100 / zendesk_tickets.total) as perc_covid_tickets,
+       num_energy_theft.total::int                              as num_energy_theft,
+       round(value_energy_theft.total, 2)                       as value_energy_theft,
+       eng_visits.total::int                                    as num_emergency_visits,
+       failed_visits.total::int                                 as covid_failed_visits
 from (
-         select sum(acc_live::int)                                                       as num_on_supply,
+         select monday                                                                   as week_commencing,
+                sum(acc_live::int)                                                       as num_on_supply,
                 sum(has_active_subscription::int)                                        as total_dd_instructions,
                 sum(occ_acc_sunday::int)                                                 as occ_accs_sunday,
                 sum((man_canc_in_window and psr)::int)                                   as psr_dd_cancellations,
@@ -10,16 +24,18 @@ from (
                 sum(((current_dd < monthly_usage_sterling) and dd_amended)::int)         as low_dd,
                 sum((dd_failure and psr)::int)                                           as psr_dd_fail,
                 sum(dd_failure::int)                                                     as dd_fail,
-                sum((payment_failed_in_week and psr)::int)                               as psr_one_off_pay_fail,
-                sum(payment_failed_in_week::int)                                         as one_off_pay_fail,
-                sum(((current_dd >= monthly_usage_sterling) and psr)::int)::double precision /
-                sum(psr::int)::double precision                                          as psr_correct_dd,
-                sum((current_dd >= monthly_usage_sterling)::int)::double precision /
-                num_on_supply::double precision                                          as correct_dd,
-                monday
+                round(sum(((current_dd >= monthly_usage_sterling) and psr)::int)::double precision * 100 /
+                      sum(psr::int)::double precision)                                   as psr_correct_dd,
+                round(sum((current_dd >= monthly_usage_sterling)::int)::double precision * 100 /
+                      num_on_supply::double precision)                                   as correct_dd,
+                sum((occ_acc_sunday and first_bill_date <= dateadd(month, -1, sunday) and
+                     not nvl(payment_in_month, false))::int)                             as occ_acc_pay_fail,
+                sum((psr and occ_acc_sunday and first_bill_date <= dateadd(month, -1, sunday) and
+                     not nvl(payment_in_month, false))::int)                             as psr_occ_acc_pay_fail
          from (
-                  with date_range as (select '2020-04-06 00:00:00'::timestamp as monday,
-                                             '2020-04-12 23:59:59'::timestamp as sunday)
+                  with date_range as (select distinct date_trunc('week', etlchange)     as monday,
+                                                      dateadd('second', -1, monday + 7) as sunday
+                                      from ref_meterpoints_audit)
                   select dcf.account_id,
                          up.user_id,
                          dcf.account_status != 'Cancelled' and
@@ -34,19 +50,28 @@ from (
                          12                                                                        as gas_monthly_usage_sterling,
                          nvl(elec_monthly_usage_sterling, 0) +
                          nvl(gas_monthly_usage_sterling, 0)                                        as monthly_usage_sterling,
-                         greatest(nvl(square_payments.max_success, 0),
-                                  nvl(stripe_payments.max_success, 0))                             as max_successful_payment,
-                         greatest(nvl(square_payments.max_failed, 0),
-                                  nvl(stripe_payments.max_failed, 0))                              as max_declined_payment,
-                         max_successful_payment < max_declined_payment                             as payment_failed_in_week,
                          nvl(gc_info.has_active_subscriptions::int, 0)                             as has_active_subscription,
                          nvl(gc_info.subscription_amount, 0)                                       as current_dd,
                          nvl(gc_info.dd_fail, false)                                               as dd_failure,
                          nvl(man_canc_in_window and (has_active_subscription = 0), false)          as man_canc_in_window,
                          nvl(sub_updated_in_window, false)                                         as dd_amended,
-                         date_range.monday
+                         date_range.monday,
+                         date_range.sunday,
+                         dcf.first_bill_date,
+                         dcf.latest_bill_date,
+                         payment_in_month.payment_in_month
                   from ref_calculated_daily_customer_file dcf
                            left join date_range on true
+                           left join (select dcf.account_id,
+                                             min(rat.amount) is not null as payment_in_month
+                                      from ref_calculated_daily_customer_file dcf
+                                               left join ref_account_transactions rat
+                                                         on dcf.account_id = rat.account_id and
+                                                            rat.transactiontype != 'INTEREST' and
+                                                            rat.amount < 0 and
+                                                            creationdetail_createddate::timestamp between dateadd(month, -1, date_range.sunday) and date_range.sunday
+                                      group by dcf.account_id) payment_in_month
+                                     on payment_in_month.account_id = dcf.account_id
                            left join ref_cdb_supply_contracts sc on dcf.account_id = sc.external_id
                            left join ref_cdb_user_permissions up
                                      on up.permissionable_type = 'App\\SupplyContract' and
@@ -57,26 +82,6 @@ from (
                                                                     attr_psr.effective_to is null and
                                                                     attr_psr.entity_id = sc.id
                            left join vw_latest_rates_ensek vlr on vlr.account_id = dcf.account_id
-                           left join (select date_trunc('week', created_at::timestamp)                  as week_commencing,
-                                             reference_id                                               as supply_contract_id,
-                                             max(case when status = 'declined' then amount else 0 end)  as max_failed,
-                                             max(case when status = 'completed' then amount else 0 end) as max_success
-                                      from aws_s3_stage2_extracts.stage2_cdbcustomerpayments
-                                      where reference_type = 'App\\SupplyContract'
-                                      group by supply_contract_id, week_commencing) stripe_payments
-                                     on stripe_payments.supply_contract_id = sc.id and
-                                        stripe_payments.week_commencing = date_range.monday
-                           left join (select date_trunc('week', created_at::timestamp)                  as week_commencing,
-                                             case
-                                                 when regexp_count(ensekid, '^[0-9]+$') = 1 then ensekid::int
-                                                 else 0 end                                             as numeric_ensek_id,
-                                             max(case when status = 'FAILED' then amount else 0 end)    as max_failed,
-                                             max(case when status = 'COMPLETED' then amount else 0 end) as max_success
-                                      from aws_fin_stage1_extracts.fin_square_api_payments
-                                      where numeric_ensek_id != 0
-                                      group by week_commencing, numeric_ensek_id) square_payments
-                                     on square_payments.week_commencing = date_range.monday and
-                                        square_payments.numeric_ensek_id = dcf.account_id
                            left join (select igl_acc_id,
                                              count(sub.id) > 0                                        as has_active_subscriptions,
                                              max(sub.amount::int)                                     as subscription_amount,
@@ -119,7 +124,26 @@ from (
          where acc_live
          group by monday
      ) account_portfolio_summaries
--- left join ref_portfolio_metrics pm_
+         left join weekly_portfolio_stats zendesk_tickets on zendesk_tickets.metric_type_id = 1 and
+                                                             zendesk_tickets.week_commencing =
+                                                             account_portfolio_summaries.week_commencing
+         left join weekly_portfolio_stats zendesk_covid on zendesk_covid.metric_type_id = 2 and
+                                                           zendesk_covid.week_commencing =
+                                                           account_portfolio_summaries.week_commencing
+         left join weekly_portfolio_stats num_energy_theft on num_energy_theft.metric_type_id = 3 and
+                                                              num_energy_theft.week_commencing =
+                                                              account_portfolio_summaries.week_commencing
+         left join weekly_portfolio_stats value_energy_theft on value_energy_theft.metric_type_id = 4 and
+                                                                value_energy_theft.week_commencing =
+                                                                account_portfolio_summaries.week_commencing
+         left join weekly_portfolio_stats eng_visits on eng_visits.metric_type_id = 5 and
+                                                        eng_visits.week_commencing =
+                                                        account_portfolio_summaries.week_commencing
+         left join weekly_portfolio_stats failed_visits on failed_visits.metric_type_id = 6 and
+                                                           failed_visits.week_commencing =
+                                                           account_portfolio_summaries.week_commencing
+where account_portfolio_summaries.week_commencing > '2020-03-29'
+  and account_portfolio_summaries.week_commencing + 7 <= getdate()
 
 
 create or replace view vw_gocardless_customer_id_mapping as
