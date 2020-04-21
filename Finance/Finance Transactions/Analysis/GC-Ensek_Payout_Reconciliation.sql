@@ -1,17 +1,30 @@
 
 ; with cte_payouts as (
-select * from aws_fin_stage1_extracts.fin_go_cardless_api_payouts
+select *
+from aws_fin_stage1_extracts.fin_go_cardless_api_payouts
 where
-  substring (created_at, 1, 10) between '2020-02-01' and '2020-02-29'
+  substring (created_at, 1, 10) between '2020-01-01' and '2020-03-31'
       )
 
 
 , cte_events_payout as (
-       select *
+       select *,
+       substring(created_at, 1, 7) as payout_month
       from aws_fin_stage1_extracts.fin_go_cardless_api_events events_a
       where events_a.resource_type = 'payouts'
-        and substring(events_a.created_at, 1, 10) between '2020-02-01' and '2020-02-29'
+        and substring(events_a.created_at, 1, 10) between '2020-01-01' and '2020-03-31'
       )
+
+
+
+, cte_ensek as (
+        select *,
+       substring(createddate, 1, 7) as payout_month
+        from aws_fin_stage1_extracts.fin_sales_ledger_all_time
+        where nominal = '7603'
+        and substring(createddate, 1, 10) between '2020-01-01' and '2020-03-31' --- dateadd(day, -0, '2020-02-01') and  dateadd(day, 0, '2020-02-29')
+      )
+
 
 
 
@@ -50,6 +63,7 @@ select distinct events.id,
                 payments.reference,
                 payments.payout,
                 payouts.payout_id ,
+                events_payout.payout_month ,
                 client.client_id                        as customers_id,
                 lkp.igl_acc_id                          as ensekAccountId
 from cte_events_payout as events_payout
@@ -96,6 +110,7 @@ select distinct events.id,
                 payments.status               as payment_status,
                 payments.payout               as payoutID,
                 payouts.payout_id,
+                events_payout.payout_month ,
                 man.mandate_id,
                 client.client_id              as customers_id,
                 lkp.igl_acc_id                as ensekAccountId
@@ -148,6 +163,7 @@ select distinct events.id,
                 payments.reference,
                 payments.payout,
                 payouts.payout_id,
+                events_payout.payout_month ,
                 client.client_id                        as customers_id,
                 lkp.igl_acc_id                          as ensekAccountId
 from cte_events_payout as events_payout
@@ -201,6 +217,7 @@ select distinct events.id,
                 payments.reference,
                 payments.payout,
                 payouts.payout_id,
+                events_payout.payout_month ,
                 client.client_id                        as customers_id,
                 lkp.igl_acc_id                          as ensekAccountId
 from cte_events_payout as events_payout
@@ -250,6 +267,7 @@ select distinct events.id,
                 payments.status               as payment_status,
                 payments.payout               as payoutID,
                 payouts.payout_id,
+                events_payout.payout_month ,
                 man.mandate_id,
                 client.client_id              as customers_id,
                 lkp.igl_acc_id                as ensekAccountId
@@ -268,24 +286,18 @@ where events.action = 'funds_returned'
 
 
 
-, cte_ensek as (
-        select *
-        from aws_fin_stage1_extracts.fin_sales_ledger_all_time
-        where nominal = '7603'
-        and substring(createddate, 1, 10) between '2020-02-01' and '2020-02-29' --- dateadd(day, -0, '2020-02-01') and  dateadd(day, 0, '2020-02-29')
-      )
-
-
 ,  cte_payments_summ as (
        select
         ensekAccountId,
         substring(created_at, 1, 10) as created_at,
+        payout_month ,
         amount,
         count(*) as Countif
         from cte_payments
        where (ensekAccountId is not null)
        group by
         ensekAccountId,
+        payout_month ,
         created_at ,
         amount
       )
@@ -294,12 +306,14 @@ where events.action = 'funds_returned'
        select
         ensekAccountId,
         substring(refunds_created_at, 1, 10) as created_at,
+        payout_month ,
         amount,
         count(*) as Countif
         from cte_refundsSettled
        where (ensekAccountId is not null)
        group by
         ensekAccountId,
+        payout_month ,
         created_at ,
         amount
       )
@@ -308,12 +322,14 @@ where events.action = 'funds_returned'
         select
         AccountId,
         CreatedDate,
+        payout_month,
         TransAmount,
         count(*) as Countif
         from cte_ensek
         where (AccountId is not null)
        group by
         AccountId,
+        payout_month,
         CreatedDate,
         TransAmount
       )
@@ -323,12 +339,14 @@ where events.action = 'funds_returned'
        select
         ensekAccountId,
         substring(created_at, 1, 10) as created_at,
+        payout_month ,
         amount,
         count(*) as Countif
         from cte_chargeBack
        where (ensekAccountId is not null)
        group by
         ensekAccountId,
+        payout_month ,
         created_at ,
         amount
       )
@@ -338,12 +356,14 @@ where events.action = 'funds_returned'
        select
         ensekAccountId,
         substring(created_at, 1, 10) as created_at,
+        payout_month ,
         amount,
         count(*) as Countif
         from cte_lateFailure
        where (ensekAccountId is not null)
        group by
         ensekAccountId,
+        payout_month ,
         created_at ,
         amount
       )
@@ -353,12 +373,14 @@ where events.action = 'funds_returned'
        select
         ensekAccountId,
         substring(refunds_created_at, 1, 10) as created_at,
+        payout_month ,
         amount,
         count(*) as Countif
         from cte_fundsReturned
        where (ensekAccountId is not null)
        group by
         ensekAccountId,
+        payout_month ,
         created_at ,
         amount
       )
@@ -370,13 +392,15 @@ where events.action = 'funds_returned'
     select
      gc.ensekAccountId ,
      gc.created_at,
+     gc.payout_month ,
      gc.amount,
      ensek.TransAmount,
      nvl(ensek.Countif, 0) as PaymentInEnsekFlag
     from cte_payments gc
     left join cte_ensek_summ ensek
         on gc.ensekAccountId = ensek.AccountId and
-           gc.amount = ensek.TransAmount
+           gc.amount = ensek.TransAmount and
+           gc.payout_month = ensek.payout_month
 
     )
 
@@ -384,6 +408,7 @@ where events.action = 'funds_returned'
     select
      gc.ensekAccountId ,
      gc.refunds_created_at as created_at,
+     gc.payout_month,
      gc.amount,
      ensek.TransAmount,
      nvl(ensek.Countif, 0) as RefundInEnsekFlag
@@ -391,6 +416,7 @@ where events.action = 'funds_returned'
     left join cte_ensek_summ ensek
         on gc.ensekAccountId = ensek.AccountId and
            (gc.amount * -1.0) = ensek.TransAmount and
+            gc.payout_month = ensek.payout_month and
             ensek.TransAmount < 0 ---- REFUNDS ONLY ----
     )
 
@@ -399,6 +425,7 @@ where events.action = 'funds_returned'
       select
        ensek.AccountId ,
        ensek.CreatedDate,
+       ensek.payout_month,
        ensek.TransAmount,
        ref.amount as refundAmount,
        paym.amount as paymentAmount ,
@@ -412,10 +439,12 @@ where events.action = 'funds_returned'
       left join cte_refunds_summ ref
           on ref.ensekAccountId = ensek.AccountId and
              (ref.amount * -1.0) = ensek.TransAmount and
+              ref.payout_month = ensek.payout_month and
               ensek.TransAmount < 0 ---- REFUNDS ONLY ----
       left join cte_payments_summ paym
           on paym.ensekAccountId = ensek.AccountId and
-             paym.amount = ensek.TransAmount
+             paym.amount = ensek.TransAmount and
+             paym.payout_month = ensek.payout_month
  )
 
 
@@ -425,13 +454,15 @@ where events.action = 'funds_returned'
     select
      gc.ensekAccountId ,
      gc.created_at,
+     gc.payout_month,
      gc.amount,
      ensek.TransAmount,
      nvl(ensek.Countif, 0) as PaymentInEnsekFlag
     from cte_chargeBack gc
     left join cte_ensek_summ ensek
         on gc.ensekAccountId = ensek.AccountId and
-           gc.amount = ensek.TransAmount
+           gc.amount = ensek.TransAmount and
+           gc.payout_month = ensek.payout_month
 
     )
 
@@ -440,20 +471,24 @@ where events.action = 'funds_returned'
     select
      gc.ensekAccountId ,
      gc.created_at,
+     gc.payout_month = ensek.payout_month,
      gc.amount,
      ensek.TransAmount,
      nvl(ensek.Countif, 0) as PaymentInEnsekFlag
     from cte_lateFailure gc
     left join cte_ensek_summ ensek
         on gc.ensekAccountId = ensek.AccountId and
-           gc.amount = ensek.TransAmount
+           gc.amount = ensek.TransAmount and
+           gc.payout_month = ensek.payout_month
 
     )
+
 
 , cte_GoCardless_fundsReturned_tab as (
     select
      gc.ensekAccountId ,
      gc.refunds_created_at as created_at,
+    gc.payout_month ,
      gc.amount,
      ensek.TransAmount,
      nvl(ensek.Countif, 0) as RefundInEnsekFlag
@@ -461,6 +496,7 @@ where events.action = 'funds_returned'
     left join cte_ensek_summ ensek
         on gc.ensekAccountId = ensek.AccountId and
            (gc.amount * -1.0) = ensek.TransAmount and
+           gc.payout_month = ensek.payout_month and
             ensek.TransAmount < 0 ---- REFUNDS ONLY ----
     )
 
@@ -473,6 +509,7 @@ where events.action = 'funds_returned'
 SELECT
 distinct
 nvl(GC.ensekAccountId, ensek.accountid ) as ensekAccountId,
+nvl(GC.payout_month, ensek.payout_month) as payout_month ,
 GC.GCCreatedAtDate,
 GC.GCAmount,
 GC.PaymentInEnsekFlag as Payment_In_Ensek_Flag,
@@ -487,6 +524,7 @@ FROM
         Select
         pay.ensekAccountId,
         pay.created_at as GCCreatedAtDate,
+        pay.payout_month,
         pay.amount as GCAmount,
         pay.PaymentInEnsekFlag ,
         0 as RefundInEnsekFlag
@@ -497,6 +535,7 @@ FROM
         select
         ref.ensekAccountId,
         ref.created_at as GCCreatedAtDate,
+        ref.payout_month,
         (ref.amount * -1.0) as GCAmount,
         0 as PaymentInEnsekFlag ,
         ref.RefundInEnsekFlag
@@ -505,6 +544,7 @@ FROM
 full outer join cte_ensek_payments_tab ensek
         on ensek.accountid = GC.ensekAccountId
        and ensek.transamount = GC.GCAmount
+       and ensek.payout_month = GC.payout_month
 order by 1
 
     )
@@ -531,13 +571,10 @@ order by 1
 
 
 
---- select * from cte_summary_check
-
-
 select * from cte_report_summary
 order by 1
 ;
 
-
+ 
 
 
