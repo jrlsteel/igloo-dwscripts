@@ -270,7 +270,7 @@ where events.action = 'funds_returned'
 
 , cte_ensek as (
         select *
-        from aws_fin_stage1_extracts.fin_sales_ledger_journals
+        from aws_fin_stage1_extracts.fin_sales_ledger_all_time
         where nominal = '7603'
         and substring(createddate, 1, 10) between '2020-02-01' and '2020-02-29' --- dateadd(day, -0, '2020-02-01') and  dateadd(day, 0, '2020-02-29')
       )
