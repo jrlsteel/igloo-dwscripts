@@ -545,7 +545,7 @@ full outer join cte_ensek_payments_tab ensek
         on ensek.accountid = GC.ensekAccountId
        and ensek.transamount = GC.GCAmount
        and ensek.payout_month = GC.payout_month
-order by 1
+order by 1,2
 
     )
 
@@ -572,9 +572,13 @@ order by 1
 
 
 select * from cte_report_summary
-order by 1
+order by 1,2
 ;
 
- 
+
+
+
+
+
 
 
