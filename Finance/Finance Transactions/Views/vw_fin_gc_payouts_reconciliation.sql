@@ -278,11 +278,11 @@ substring (created_at, 1, 10)                                   payouts_created_
 payouts.payout_month,
 payouts.created_at,
 payouts.amount ::float / 100 as payoutAmount,
-trunc(round(payments.payments_amount ::float, 2), 2) as payments_amount,
-trunc(round(refunds.refunds_amount ::float, 2), 2) as refunds_amount,
-trunc(round(lateFailure.lateFailure_amount ::float, 2), 2) as lateFailure_amount,
-trunc(round(chargeBack.chargeBack_amount ::float, 2), 2) as chargeBack_amount,
-trunc(round(fundsReturned.fundsReturned_amount ::float, 2), 2) as fundsReturned_amount
+payments.payments_amount  as payments_amount,
+refunds.refunds_amount  as refunds_amount,
+lateFailure.lateFailure_amount  as lateFailure_amount,
+chargeBack.chargeBack_amount  as chargeBack_amount,
+fundsReturned.fundsReturned_amount   as fundsReturned_amount
 from cte_payouts payouts
 left join (select payout_id, sum (amount) as payments_amount
 from cte_payments
@@ -306,9 +306,10 @@ order by 1, 2, 3
 , cte_output as (
 --- OUTPUT -----
 select stg.*,
-trunc(PayoutReconcilation, 0),
+(payoutAmount - PayoutReconcilation) as discrepancy_amount,
 CASE
-WHEN trunc(payoutAmount, 0) = trunc(PayoutReconcilation, 0) then 0
+--- WHEN payoutAmount = PayoutReconcilation then 0 ---
+WHEN (payoutAmount - PayoutReconcilation) between -0.02 and 0.02 then 0
 ELSE 1
 END as discrepancyFlag
 from (select *,
