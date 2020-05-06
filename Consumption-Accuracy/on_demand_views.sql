@@ -274,102 +274,8 @@ from (select acc_id                                        as account_id,
          left join vw_cons_acc_account_overrides ao on ao.account_id = demand.account_id and ao.meterpointtype = 'E'
 ;
 
--- GAS --
 
--- update to readings internal pa view
-create or replace view vw_corrected_round_clock_reading_pa(account_id, meter_point_id, meter_id, meter_reading_id, register_id,
-                                                register_reading_id, billable, haslivecharge, hasregisteradvance,
-                                                meterpointnumber, meterpointtype, meterreadingcreateddate,
-                                                meterreadingdatetime, meterreadingsourceuid, meterreadingstatusuid,
-                                                meterreadingtypeuid, meterserialnumber, registerreference, required,
-                                                no_of_digits, readingvalue, previous_reading, current_reading,
-                                                max_previous_reading, max_reading, corrected_reading, meter_rolled_over,
-                                                etlchange) as
-SELECT s.account_id,
-       s.meter_point_id,
-       s.meter_id,
-       s.meter_reading_id,
-       s.register_id,
-       s.register_reading_id,
-       s.billable,
-       s.haslivecharge,
-       s.hasregisteradvance,
-       s.meterpointnumber,
-       s.meterpointtype,
-       s.meterreadingcreateddate,
-       s.meterreadingdatetime,
-       s.meterreadingsourceuid,
-       s.meterreadingstatusuid,
-       s.meterreadingtypeuid,
-       s.meterserialnumber,
-       s.registerreference,
-       s.required,
-       s.no_of_digits,
-       s.readingvalue,
-       s.previous_reading,
-       s.current_reading,
-       s.max_previous_reading,
-       s.max_reading,
-       round_the_clock_reading_check_digits_v1(s.current_reading,
-                                               s.previous_reading,
-                                               s.max_reading,
-                                               CASE
-                                                   WHEN ((s.max_previous_reading <> s.current_reading) AND
-                                                         (s.max_previous_reading > (s.max_reading - (10000)::double precision)))
-                                                       THEN 'Y'::character varying
-                                                   ELSE 'N'::character varying END) AS corrected_reading,
-       CASE
-           WHEN ((s.max_previous_reading <> s.current_reading) AND
-                 (s.max_previous_reading > (s.max_reading - (10000)::double precision))) THEN 'Y'::character varying
-           ELSE 'N'::character varying END                                          AS meter_rolled_over,
-       ('now'::character varying)::timestamp with time zone                         AS etlchange
-FROM (SELECT ri.account_id,
-             ri.meter_point_id,
-             ri.meter_id,
-             ri.meter_reading_id,
-             ri.register_id,
-             ri.register_reading_id,
-             ri.billable,
-             ri.haslivecharge,
-             ri.hasregisteradvance,
-             ri.meterpointnumber,
-             ri.meterpointtype,
-             ri.meterreadingcreateddate,
-             ri.meterreadingdatetime,
-             ri.meterreadingsourceuid,
-             ri.meterreadingstatusuid,
-             ri.meterreadingtypeuid,
-             ri.meterserialnumber,
-             ri.readingvalue,
-             ri.registerreference,
-             ri.required,
-             COALESCE((rega.registersattributes_attributevalue)::integer, 0)                                                                           AS no_of_digits,
-             COALESCE(pg_catalog.lead(ri.readingvalue, 1)
-                      OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC),
-                      (0)::double precision)                                                                                                           AS previous_reading,
-             COALESCE(ri.readingvalue, (0)::double precision)                                                                                          AS current_reading,
-             (power((10)::double precision,
-                    (COALESCE((rega.registersattributes_attributevalue)::integer, 0))::double precision) -
-              (1)::double precision)                                                                                                                   AS max_reading,
-             "max"(ri.readingvalue)
-             OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS max_previous_reading
-      FROM (ref_readings_internal_pa ri
-               LEFT JOIN ref_registers_attributes rega
-                         ON ((((rega.register_id = ri.register_id) AND (rega.account_id = ri.account_id)) AND
-                              ((rega.registersattributes_attributename)::text =
-                               ('No_Of_Digits'::character varying)::text))))
-      WHERE (((((((ri.meterreadingsourceuid)::text = ('CUSTOMER'::character varying)::text) AND
-                 ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
-                ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true)) OR
-              (((((ri.meterreadingsourceuid)::text = ('DC'::character varying)::text) AND
-                 ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
-                ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true))) OR
-             (((((ri.meterreadingsourceuid)::text = ('DCOPENING'::character varying)::text) AND
-                ((ri.meterreadingstatusuid)::text = ('VALID'::character varying)::text)) AND
-               ((ri.meterreadingtypeuid)::text = ('ACTUAL'::character varying)::text)) AND (ri.billable = true)))
-      ORDER BY ri.account_id, ri.register_id, ri.meterreadingdatetime) s;
-alter table vw_corrected_round_clock_reading_pa
-    owner to igloo;
+-- GAS --
 
 -- view for readings from ensek and nrl
 create or replace view vw_readings_aq_all_on_demand as
@@ -540,7 +446,7 @@ from (select mp_gas.account_id                                                  
                rma_ldz.attributes_attributevalue,
                rma_imp.attributes_attributevalue) st
 ;
--- igl_ind_eac on demand update
+-- igl_ind_aq on demand update
 create or replace view vw_igloo_ind_aq_on_demand as
 select account_id,
        LDZ                                                             as gas_ldz,
@@ -597,71 +503,68 @@ from (
 
                          -- additional info for the output table
                          rma_imp.attributes_attributevalue                                      as gas_imperial_meter_indicator,
-                         reg_gas.meter_point_id,
-                         reg_gas.meter_id,
-                         reg_gas.registers_eacaq,
+                         rmp.meter_point_id,
+                         rm.meter_id,
+                         reg.registers_eacaq,
                          read_pairs.no_of_digits,
                          read_pairs.meterpointnumber,
                          rmp.supplyenddate,
                          rm.removeddate
-         from
+         from ref_meterpoints rmp
+                  inner join ref_meters rm
+                             on rmp.account_id = rm.account_id and rmp.meter_point_id = rm.meter_point_id and
+                                rm.removeddate is null
+                  inner join ref_registers reg on reg.meter_point_id = rm.meter_point_id and reg.meter_id = rm.meter_id
              -- open / close read pairs
-             (select *
-              from (select
-                        --readings info
-                        read_close.account_id,
-                        read_close.register_id,
-                        read_close.meterreadingdatetime                                                                    as close_date,
-                        read_close.readingvalue                                                                            as close_val,
-                        read_open.meterreadingdatetime                                                                     as open_date,
-                        read_open.readingvalue                                                                             as open_val,
-                        read_close.no_of_digits, -- just for output table
-                        read_close.meterpointnumber,
-                        --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
-                        open_read_suitability_score(
-                                datediff(days, read_open.meterreadingdatetime, read_close.meterreadingdatetime),
-                                2)                                                                                         as orss,
-                        min(open_read_suitability_score(
-                                datediff(days, read_open.meterreadingdatetime, read_close.meterreadingdatetime), 2))
-                        over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_orss
-                    from (select *
-                          from (select rriv.*,
-                                       row_number()
-                                       over (partition by rriv.account_id, rriv.register_id order by rriv.meterreadingdatetime desc) as r
-                                from vw_corrected_round_clock_reading_pa rriv
-                                where rriv.meterpointtype = 'G'
-                               ) ranked
-                          where r = 1) read_close
-                             inner join vw_readings_aq_all_on_demand read_open
-                                        on read_open.register_id = read_close.register_id
-                                            and read_open.meterreadingsourceuid not in ('DCOPENING', 'DC')
-                                            --The following line can be removed to allow matching of register reads prior to account creation (NRL/NOSI)
-                                            --and read_open.account_id = read_close.account_id
-                                            and datediff(days, read_open.meterreadingdatetime,
-                                                         read_close.meterreadingdatetime) between 273 and (365 * 3)
-                   ) possible_read_pairs
-              where orss = best_orss
-                and open_date >= '2014-10-01' --the oldest date we have WAALP data for
-             ) read_pairs
-                 --get meter_point_id from ref_registers
-                 left join ref_registers reg_gas
-                           on read_pairs.account_id = reg_gas.account_id and
-                              read_pairs.register_id = reg_gas.register_id --LDZ for the meterpoint
-                 left join ref_meterpoints_attributes rma_ldz
-                           on reg_gas.account_id = rma_ldz.account_id and
-                              reg_gas.meter_point_id = rma_ldz.meter_point_id and
-                              rma_ldz.attributes_attributename = 'LDZ' --Whether the meterpoint is Imperial or Metric
-                 left join ref_meterpoints_attributes rma_imp
-                           on reg_gas.account_id = rma_imp.account_id and
-                              reg_gas.meter_point_id = rma_imp.meter_point_id and
-                              rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
-                 left join ref_meterpoints rmp
-                           on read_pairs.account_id = rmp.account_id and
-                              reg_gas.meter_point_id = rmp.meter_point_id
-                 left join ref_meters rm
-                           on rm.account_id = read_pairs.account_id and
-                              rm.meter_point_id = reg_gas.meter_point_id and
-                              rm.meter_id = reg_gas.meter_id
+                  inner join (select *
+                              from (select
+                                        --readings info
+                                        read_close.account_id,
+                                        read_close.register_id,
+                                        read_close.meterreadingdatetime                                                                    as close_date,
+                                        read_close.readingvalue                                                                            as close_val,
+                                        read_open.meterreadingdatetime                                                                     as open_date,
+                                        read_open.readingvalue                                                                             as open_val,
+                                        read_close.no_of_digits, -- just for output table
+                                        read_close.meterpointnumber,
+                                        --info to inform selection of valid pairs (rows that contain the best opening reading for each closing reading)
+                                        open_read_suitability_score(
+                                                datediff(days, read_open.meterreadingdatetime,
+                                                         read_close.meterreadingdatetime),
+                                                2)                                                                                         as orss,
+                                        min(open_read_suitability_score(
+                                                datediff(days, read_open.meterreadingdatetime,
+                                                         read_close.meterreadingdatetime), 2))
+                                        over (partition by read_close.account_id, read_close.register_id, read_close.meterreadingdatetime) as best_orss
+                                    from (select *
+                                          from (select rriv.*,
+                                                       row_number()
+                                                       over (partition by rriv.account_id, rriv.register_id order by rriv.meterreadingdatetime desc) as r
+                                                from vw_corrected_round_clock_reading_pa rriv
+                                                where rriv.meterpointtype = 'G'
+                                               ) ranked
+                                          where r = 1) read_close
+                                             inner join vw_readings_aq_all_on_demand read_open
+                                                        on read_open.register_id = read_close.register_id
+                                                            and
+                                                           read_open.meterreadingsourceuid not in ('DCOPENING', 'DC')
+                                                            --The following line can be removed to allow matching of register reads prior to account creation (NRL/NOSI)
+                                                            --and read_open.account_id = read_close.account_id
+                                                            and datediff(days, read_open.meterreadingdatetime,
+                                                                         read_close.meterreadingdatetime) between 273 and (365 * 3)
+                                   ) possible_read_pairs
+                              where orss = best_orss
+                                and open_date >= '2014-10-01' /*the oldest date we have WAALP data for*/) read_pairs
+                             on read_pairs.account_id = reg.account_id and
+                                read_pairs.register_id = reg.register_id
+                  left join ref_meterpoints_attributes rma_ldz
+                            on rmp.account_id = rma_ldz.account_id and
+                               rmp.meter_point_id = rma_ldz.meter_point_id and
+                               rma_ldz.attributes_attributename = 'LDZ'
+                  left join ref_meterpoints_attributes rma_imp
+                            on rmp.account_id = rma_imp.account_id and
+                               rmp.meter_point_id = rma_imp.meter_point_id and
+                               rma_imp.attributes_attributename = 'Gas_Imperial_Meter_Indicator'
      ) calc_params
 ;
 
@@ -691,16 +594,116 @@ from (select acc_id                                       as account_id,
              min(ac_read_days_diff_gas)                   as ac_read_days_diff_gas,
              min(nvl(latest_gas_read_date, '1970-01-01')) as latest_gas_read_date,
              sum(igl_ind_aq)                              as igl_ind_aq
-      from (select coalesce(ac.account_id, iie.account_id) as acc_id,
-                   coalesce(ac.annualised_consumption, 0)  as annualised_consumption,
-                   coalesce(ac.read_days_diff_gas, 0)      as ac_read_days_diff_gas,
+      from (select coalesce(ac.account_id, iiaq.account_id) as acc_id,
+                   coalesce(ac.annualised_consumption, 0)   as annualised_consumption,
+                   coalesce(ac.read_days_diff_gas, 0)       as ac_read_days_diff_gas,
                    coalesce(ac.read_max_created_date_gas,
-                            iie.read_max_datetime_gas)     as latest_gas_read_date,
-                   coalesce(iie.igl_ind_aq, 0)             as igl_ind_aq
+                            iiaq.read_max_datetime_gas)     as latest_gas_read_date,
+                   coalesce(iiaq.igl_ind_aq, 0)             as igl_ind_aq
             from vw_annualised_consumption_gas_on_demand ac
-                     full join vw_igloo_ind_aq_on_demand iie
-                               on ac.account_id = iie.account_id and ac.register_id = iie.register_id) register_level
+                     full join vw_igloo_ind_aq_on_demand iiaq
+                               on ac.account_id = iiaq.account_id and ac.register_id = iiaq.register_id) register_level
       group by acc_id) demand
          inner join ref_consumption_accuracy_gas batch on batch.account_id = demand.account_id
          left join vw_cons_acc_account_overrides ao on ao.account_id = demand.account_id and ao.meterpointtype = 'G'
 ;
+
+
+-- BOTH --
+
+-- update to readings internal pa view
+create or replace view vw_corrected_round_clock_reading_pa(account_id, meter_point_id, meter_id, meter_reading_id,
+                                                           register_id,
+                                                           register_reading_id, billable, haslivecharge,
+                                                           hasregisteradvance,
+                                                           meterpointnumber, meterpointtype, meterreadingcreateddate,
+                                                           meterreadingdatetime, meterreadingsourceuid,
+                                                           meterreadingstatusuid,
+                                                           meterreadingtypeuid, meterserialnumber, registerreference,
+                                                           required,
+                                                           no_of_digits, readingvalue, previous_reading,
+                                                           current_reading,
+                                                           max_previous_reading, max_reading, corrected_reading,
+                                                           meter_rolled_over,
+                                                           etlchange) as
+SELECT s.account_id,
+       s.meter_point_id,
+       s.meter_id,
+       s.meter_reading_id,
+       s.register_id,
+       s.register_reading_id,
+       s.billable,
+       s.haslivecharge,
+       s.hasregisteradvance,
+       s.meterpointnumber,
+       s.meterpointtype,
+       s.meterreadingcreateddate,
+       s.meterreadingdatetime,
+       s.meterreadingsourceuid,
+       s.meterreadingstatusuid,
+       s.meterreadingtypeuid,
+       s.meterserialnumber,
+       s.registerreference,
+       s.required,
+       s.no_of_digits,
+       s.readingvalue,
+       s.previous_reading,
+       s.current_reading,
+       s.max_previous_reading,
+       s.max_reading,
+       round_the_clock_reading_check_digits_v1(s.current_reading,
+                                               s.previous_reading,
+                                               s.max_reading,
+                                               CASE
+                                                   WHEN ((s.max_previous_reading <> s.current_reading) AND
+                                                         (s.max_previous_reading > (s.max_reading - (10000)::double precision)))
+                                                       THEN 'Y'::character varying
+                                                   ELSE 'N'::character varying END) AS corrected_reading,
+       CASE
+           WHEN ((s.max_previous_reading <> s.current_reading) AND
+                 (s.max_previous_reading > (s.max_reading - (10000)::double precision))) THEN 'Y'::character varying
+           ELSE 'N'::character varying END                                          AS meter_rolled_over,
+       ('now'::character varying)::timestamp with time zone                         AS etlchange
+FROM (SELECT ri.account_id,
+             ri.meter_point_id,
+             ri.meter_id,
+             ri.meter_reading_id,
+             ri.register_id,
+             ri.register_reading_id,
+             ri.billable,
+             ri.haslivecharge,
+             ri.hasregisteradvance,
+             ri.meterpointnumber,
+             ri.meterpointtype,
+             ri.meterreadingcreateddate,
+             ri.meterreadingdatetime,
+             ri.meterreadingsourceuid,
+             ri.meterreadingstatusuid,
+             ri.meterreadingtypeuid,
+             ri.meterserialnumber,
+             ri.readingvalue,
+             ri.registerreference,
+             ri.required,
+             COALESCE((rega.registersattributes_attributevalue)::integer, 0)                                                                           AS no_of_digits,
+             COALESCE(pg_catalog.lead(ri.readingvalue, 1)
+                      OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC),
+                      (0)::double precision)                                                                                                           AS previous_reading,
+             COALESCE(ri.readingvalue, (0)::double precision)                                                                                          AS current_reading,
+             (power((10)::double precision,
+                    (COALESCE((rega.registersattributes_attributevalue)::integer, 0))::double precision) -
+              (1)::double precision)                                                                                                                   AS max_reading,
+             "max"(ri.readingvalue)
+             OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS max_previous_reading
+      FROM (ref_readings_internal_pa ri
+               LEFT JOIN ref_registers_attributes rega
+                         ON ((((rega.register_id = ri.register_id) AND (rega.account_id = ri.account_id)) AND
+                              ((rega.registersattributes_attributename)::text =
+                               ('No_Of_Digits'::character varying)::text))))
+      WHERE ri.meterreadingstatusuid = 'VALID'
+        and ri.billable = true
+        and ri.meterreadingsourceuid != 'ESTIMATE'
+        and ri.meterreadingtypeuid != 'ESTIMATED'
+      ORDER BY ri.account_id, ri.register_id, ri.meterreadingdatetime) s;
+alter table vw_corrected_round_clock_reading_pa
+    owner to igloo;
+
