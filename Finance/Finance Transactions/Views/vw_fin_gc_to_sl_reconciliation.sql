@@ -19,11 +19,13 @@ and substring (events_a.created_at, 1, 10) between '2017-01-01' and to_char(sysd
 
 , cte_ensek as (
 select *,
-substring (createddate, 1, 7) as payout_month
+CASE WHEN substring (createddate, 9, 2)::int < 26
+     THEN substring (createddate, 1, 7)
+     ELSE substring(dateadd(month, 1, createddate), 1, 7)
+END as payout_month
 from aws_fin_stage1_extracts.fin_sales_ledger_all_time
 where nominal = '7603'
 and substring (createddate, 1, 10) between '2017-01-01' and to_char(sysdate, 'YYYY-MM-DD')
---- dateadd(day, -0, '2020-02-01') and  dateadd(day, 0, '2020-02-29')
 )
 
 
@@ -283,33 +285,27 @@ where events.action = 'funds_returned'
 , cte_payments_summ as (
 select
 ensekAccountId,
-substring (created_at, 1, 10) as created_at,
+created_at,
+charge_date as Payment_ChargeDate,
 payout_month,
 amount,
-count (*) as Countif
-from cte_payments
+row_number() over (partition by ensekAccountId,
+payout_month, amount order by gc.created_at asc) as Countif
+from cte_payments gc
 where (ensekAccountId is not null)
-group by
-ensekAccountId,
-payout_month,
-created_at,
-amount
 )
 
 , cte_refunds_summ as (
 select
 ensekAccountId,
-substring (refunds_created_at, 1, 10) as created_at,
+events_created_at,
+substring (refunds_created_at, 1, 10) as refunds_created_at,
 payout_month,
 amount,
-count (*) as Countif
+row_number() over (partition by ensekAccountId,
+payout_month, amount order by refunds_created_at asc) as Countif
 from cte_refundsSettled
 where (ensekAccountId is not null)
-group by
-ensekAccountId,
-payout_month,
-created_at,
-amount
 )
 
 , cte_ensek_summ as (
@@ -318,14 +314,10 @@ AccountId,
 CreatedDate,
 payout_month,
 TransAmount,
-count (*) as Countif
+row_number() over (partition by AccountId, payout_month, TransAmount
+order by accounttransactionid asc) as Countif
 from cte_ensek
 where (AccountId is not null)
-group by
-AccountId,
-payout_month,
-CreatedDate,
-TransAmount
 )
 
 
@@ -335,14 +327,10 @@ ensekAccountId,
 substring (created_at, 1, 10) as created_at,
 payout_month,
 amount,
-count (*) as Countif
-from cte_chargeBack
+row_number() over (partition by ensekAccountId,
+payout_month, amount order by gc.created_at asc) as Countif
+from cte_chargeBack gc
 where (ensekAccountId is not null)
-group by
-ensekAccountId,
-payout_month,
-created_at,
-amount
 )
 
 
@@ -352,14 +340,10 @@ ensekAccountId,
 substring (created_at, 1, 10) as created_at,
 payout_month,
 amount,
-count (*) as Countif
-from cte_lateFailure
+row_number() over (partition by ensekAccountId,
+payout_month, amount order by gc.created_at asc) as Countif
+from cte_lateFailure gc
 where (ensekAccountId is not null)
-group by
-ensekAccountId,
-payout_month,
-created_at,
-amount
 )
 
 
@@ -369,14 +353,10 @@ ensekAccountId,
 substring (refunds_created_at, 1, 10) as created_at,
 payout_month,
 amount,
-count (*) as Countif
-from cte_fundsReturned
+row_number() over (partition by ensekAccountId,
+payout_month, amount order by gc.refunds_created_at asc) as Countif
+from cte_fundsReturned gc
 where (ensekAccountId is not null)
-group by
-ensekAccountId,
-payout_month,
-created_at,
-amount
 )
 
 
@@ -384,31 +364,39 @@ amount
 select
 gc.ensekAccountId,
 gc.created_at,
+gc.Payment_ChargeDate,
 gc.payout_month,
 gc.amount,
 ensek.TransAmount,
+gc.Countif,
 nvl(ensek.Countif, 0) as PaymentInEnsekFlag
-from cte_payments gc
+from cte_payments_summ gc
 left join cte_ensek_summ ensek
 on gc.ensekAccountId = ensek.AccountId and
 gc.amount = ensek.TransAmount and
-gc.payout_month = ensek.payout_month
+gc.payout_month = ensek.payout_month and
+gc.Countif = ensek.Countif and
+substring (gc.created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10)
 
 )
 
 , cte_GoCardless_refunds_tab as (
 select
 gc.ensekAccountId,
-gc.refunds_created_at as created_at,
+gc.events_created_at as created_at,
+gc.refunds_created_at,
 gc.payout_month,
 gc.amount,
 ensek.TransAmount,
+gc.Countif,
 nvl(ensek.Countif, 0) as RefundInEnsekFlag
-from cte_refundsSettled gc
+from cte_refunds_summ gc
 left join cte_ensek_summ ensek
 on gc.ensekAccountId = ensek.AccountId and
 (gc.amount * -1.0) = ensek.TransAmount and
 gc.payout_month = ensek.payout_month and
+gc.Countif = ensek.Countif and
+substring (gc.refunds_created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10) and
 ensek.TransAmount < 0 ---- REFUNDS ONLY ----
 )
 
@@ -419,12 +407,13 @@ ensek.AccountId,
 ensek.CreatedDate,
 ensek.payout_month,
 ensek.TransAmount,
+ensek.Countif,
 CASE WHEN ensek.TransAmount > 0 then ensek.TransAmount
-      ELSE NULL
-END  as ensekPaymentsAmount,
+ELSE NULL
+END as ensekPaymentsAmount,
 CASE WHEN ensek.TransAmount < 0 then ensek.TransAmount
-      ELSE NULL
-END  as ensekRefundsAmount,
+ELSE NULL
+END as ensekRefundsAmount,
 ref.amount as refundAmount,
 paym.amount as paymentAmount,
 paym.Countif as C_Pay,
@@ -433,16 +422,20 @@ CASE WHEN coalesce (paym.Countif, ref.Countif, 0) = 0
 THEN 0
 ELSE 1
 END as inGCFlag
-from cte_ensek ensek
+from cte_ensek_summ ensek
 left join cte_refunds_summ ref
 on ref.ensekAccountId = ensek.AccountId and
 (ref.amount * -1.0) = ensek.TransAmount and
 ref.payout_month = ensek.payout_month and
+ref.Countif = ensek.Countif and
+substring (ref.refunds_created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10) and
 ensek.TransAmount < 0 ---- REFUNDS ONLY ----
 left join cte_payments_summ paym
 on paym.ensekAccountId = ensek.AccountId and
 paym.amount = ensek.TransAmount and
-paym.payout_month = ensek.payout_month
+paym.payout_month = ensek.payout_month and
+paym.Countif = ensek.Countif and
+substring (paym.created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10)
 )
 
 
@@ -551,22 +544,23 @@ order by 1, 2
 )
 
 
-
 , cte_report_summary_GC as (
 
 SELECT
 distinct
-GC.ensekAccountId  as ensekAccountId,
-GC.payout_month  as payout_month,
+GC.ensekAccountId as ensekAccountId,
+GC.payout_month as payout_month,
 GC.GCCreatedAtDate,
+GC.GCPayment_ChargeDate,
+GC.GCRefund_Date,
 GC.GCAmount,
 GC.GCPaymentAmount,
 GC.GCRefundAmount,
 GC.PaymentInEnsekFlag as Payment_In_Ensek_Flag,
 GC.RefundInEnsekFlag as Refund_In_Ensek_Flag,
 CASE WHEN GC.PaymentInEnsekFlag >= 1 or GC.RefundInEnsekFlag >= 1 THEN 0
-     ELSE 1
-END as  In_GC_not_in_Ensek_Flag ,
+ELSE 1
+END as In_GC_not_in_Ensek_Flag,
 ensek.createddate as EnsekCreatedAtDate,
 ensek.transamount as EnsekAmount,
 ensek.ensekPaymentsAmount,
@@ -579,12 +573,15 @@ FROM
 Select
 pay.ensekAccountId,
 pay.created_at as GCCreatedAtDate,
+pay.Payment_ChargeDate as GCPayment_ChargeDate,
+null as GCRefund_Date,
 pay.payout_month,
 pay.amount as GCAmount,
 pay.amount as GCPaymentAmount,
 null as GCRefundAmount,
 pay.PaymentInEnsekFlag,
-0 as RefundInEnsekFlag
+0 as RefundInEnsekFlag,
+Countif
 from cte_GoCardless_payments_tab pay
 
 UNION
@@ -592,23 +589,25 @@ UNION
 select
 ref.ensekAccountId,
 ref.created_at as GCCreatedAtDate,
+null as GCPayment_ChargeDate,
+ref.refunds_created_at as GCRefund_Date,
 ref.payout_month,
 (ref.amount * -1.0) as GCAmount,
 null as GCPaymentAmount,
 (ref.amount * -1.0) as GCRefundAmount,
 0 as PaymentInEnsekFlag,
-ref.RefundInEnsekFlag
+ref.RefundInEnsekFlag,
+Countif
 from cte_GoCardless_refunds_tab ref
 ) GC
 left join cte_ensek_payments_tab ensek
 on ensek.accountid = GC.ensekAccountId
 and ensek.transamount = GC.GCAmount
 and ensek.payout_month = GC.payout_month
+and ensek.Countif = GC.Countif
 order by 1, 2
 
 )
-
-
 
 
 , cte_report_summary_ensek as (
@@ -623,11 +622,13 @@ ensek.ensekPaymentsAmount,
 ensek.ensekRefundsAmount,
 ensek.inGCFlag as Ensek_In_GC_Flag,
 CASE WHEN ensek.inGCFlag >= 1 THEN 0
-     ELSE 1
-END as  In_Ensek_not_in_GC_Flag ,
+ELSE 1
+END as In_Ensek_not_in_GC_Flag,
 ensek.C_Ref,
 ensek.C_Pay,
 GC.GCCreatedAtDate,
+GC.GCPayment_ChargeDate,
+GC.GCRefund_Date,
 GC.GCAmount,
 GC.GCPaymentAmount,
 GC.GCRefundAmount,
@@ -638,12 +639,15 @@ FROM
 Select
 pay.ensekAccountId,
 pay.created_at as GCCreatedAtDate,
+pay.Payment_ChargeDate as GCPayment_ChargeDate,
+null as GCRefund_Date,
 pay.payout_month,
 pay.amount as GCAmount,
 pay.amount as GCPaymentAmount,
 null as GCRefundAmount,
 pay.PaymentInEnsekFlag,
-0 as RefundInEnsekFlag
+0 as RefundInEnsekFlag,
+Countif
 from cte_GoCardless_payments_tab pay
 
 UNION
@@ -651,23 +655,25 @@ UNION
 select
 ref.ensekAccountId,
 ref.created_at as GCCreatedAtDate,
+null as GCPayment_ChargeDate,
+ref.refunds_created_at as GCRefund_Date,
 ref.payout_month,
 (ref.amount * -1.0) as GCAmount,
 null as GCPaymentAmount,
 (ref.amount * -1.0) as GCRefundAmount,
 0 as PaymentInEnsekFlag,
-ref.RefundInEnsekFlag
+ref.RefundInEnsekFlag,
+Countif
 from cte_GoCardless_refunds_tab ref
 ) GC
 right join cte_ensek_payments_tab ensek
 on ensek.accountid = GC.ensekAccountId
 and ensek.transamount = GC.GCAmount
 and ensek.payout_month = GC.payout_month
+and ensek.Countif = GC.Countif
 order by 1, 2
 
 )
-
-
 
 
 , cte_summary_check as (select sum (CASE
@@ -691,79 +697,136 @@ from cte_report_summary
 
 
 , cte_report_summary_GC01 as (
- select
-  ensekAccountId,
-  payout_month,
-  GCCreatedAtDate,
-  GCAmount,
-  GCPaymentAmount,
-  GCRefundAmount,
-  Payment_In_Ensek_Flag,
-  Refund_In_Ensek_Flag,
-  In_GC_not_in_Ensek_Flag,
-  EnsekCreatedAtDate,
-  EnsekAmount,
-  ensekPaymentsAmount,
-  ensekRefundsAmount,
-  Ensek_In_GC_Flag,
-  C_Ref,
-  C_Pay,
-  CASE WHEN EnsekCreatedAtDate is null THEN 1
-       WHEN datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp)  > 1 THEN 1
-       WHEN datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) <= 1 THEN 0
-       ELSE 1
-  END    as discrepancy_flag_day_1,
- datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) as GC_SL_Date_Difference
+select
+ensekAccountId,
+payout_month,
+GCCreatedAtDate,
+GCPayment_ChargeDate,
+GCRefund_Date,
+GCAmount,
+GCPaymentAmount,
+GCRefundAmount,
+CASE WHEN EnsekCreatedAtDate is NULL THEN 1
+ELSE 0
+END as GC_Only_Flag,
+Payment_In_Ensek_Flag,
+Refund_In_Ensek_Flag,
+In_GC_not_in_Ensek_Flag,
+EnsekCreatedAtDate,
+EnsekAmount,
+ensekPaymentsAmount,
+ensekRefundsAmount,
+CASE WHEN GCCreatedAtDate is NULL THEN 1
+ELSE 0
+END as Ensek_Only_Flag,
+Ensek_In_GC_Flag,
+C_Ref,
+C_Pay,
+CASE WHEN GCRefund_Date is not null
+THEN
+((DATEDIFF(day, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) + 1)
+-(DATEDIFF(week, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) * 2)
+-(CASE WHEN date_part(dow, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp) = 0 THEN 1 ELSE 0 END)
+-(CASE WHEN date_part(dow, EnsekCreatedAtDate::timestamp) = 6 THEN 1 ELSE 0 END))
+- 1
+WHEN GCPayment_ChargeDate is not null
+THEN
+((DATEDIFF(day, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) + 1)
+-(DATEDIFF(week, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) * 2)
+-(CASE WHEN date_part(dow, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp) = 0 THEN 1 ELSE 0 END)
+-(CASE WHEN date_part(dow, EnsekCreatedAtDate::timestamp) = 6 THEN 1 ELSE 0 END))
+-1
+ELSE NULL
+END as GC_SL_Date_Difference
 from cte_report_summary_GC
-      )
-
+)
 
 
 , cte_report_summary_SL01 as (
- select
-  ensekAccountId,
-  payout_month,
-  EnsekCreatedAtDate,
-  EnsekAmount,
-  ensekPaymentsAmount,
-  ensekRefundsAmount,
-  Ensek_In_GC_Flag,
-  In_Ensek_not_in_GC_Flag ,
-  C_Ref,
-  C_Pay,
-  GCCreatedAtDate,
-  GCAmount,
-  GCPaymentAmount,
-  GCRefundAmount,
-  Payment_In_Ensek_Flag,
-  Refund_In_Ensek_Flag,
-  CASE WHEN EnsekCreatedAtDate is null THEN 1
-       WHEN datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp)  > 1 THEN 1
-       WHEN datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) <= 1 THEN 0
-       ELSE 1
-  END    as discrepancy_flag_day_1,
- datediff(day, substring(GCCreatedAtDate, 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) as GC_SL_Date_Difference
+select
+ensekAccountId,
+payout_month,
+EnsekCreatedAtDate,
+EnsekAmount,
+ensekPaymentsAmount,
+ensekRefundsAmount,
+CASE WHEN GCCreatedAtDate is NULL THEN 1
+ELSE 0
+END as Ensek_Only_Flag,
+Ensek_In_GC_Flag,
+In_Ensek_not_in_GC_Flag,
+C_Ref,
+C_Pay,
+GCCreatedAtDate,
+GCPayment_ChargeDate,
+GCRefund_Date,
+GCAmount,
+GCPaymentAmount,
+GCRefundAmount,
+CASE WHEN EnsekCreatedAtDate is NULL THEN 1
+ELSE 0
+END as GC_Only_Flag,
+Payment_In_Ensek_Flag,
+Refund_In_Ensek_Flag,
+CASE WHEN GCRefund_Date is not null
+THEN
+((DATEDIFF(day, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) + 1)
+-(DATEDIFF(week, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) * 2)
+-(CASE WHEN date_part(dow, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp) = 0 THEN 1 ELSE 0 END)
+-(CASE WHEN date_part(dow, EnsekCreatedAtDate::timestamp) = 6 THEN 1 ELSE 0 END))
+- 1
+WHEN GCPayment_ChargeDate is not null
+THEN
+((DATEDIFF(day, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) + 1)
+-(DATEDIFF(week, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp, EnsekCreatedAtDate::timestamp) * 2)
+-(CASE WHEN date_part(dow, substring (nvl(GCPayment_ChargeDate, GCRefund_Date), 1, 10)::timestamp) = 0 THEN 1 ELSE 0 END)
+-(CASE WHEN date_part(dow, EnsekCreatedAtDate::timestamp) = 6 THEN 1 ELSE 0 END))
+-1
+ELSE NULL
+END as GC_SL_Date_Difference
+
 from cte_report_summary_ensek
-      )
+)
+
+
+, cte_report_summary_GC02 as (
+select *,
+CASE WHEN EnsekCreatedAtDate is null THEN 1
+WHEN GC_SL_Date_Difference > 2 THEN 1
+WHEN GC_SL_Date_Difference <= 2 THEN 0
+ELSE 1
+END as discrepancy_flag_day_1,
+CASE WHEN gcpaymentamount is not null or ensekpaymentsamount is not null THEN 'Payments'
+WHEN GCRefundAmount is not null or ensekRefundsAmount is not null THEN 'Refunds'
+ELSE 'NA'
+END as Event_Type
+from cte_report_summary_GC01
+)
+
+
+, cte_report_summary_SL02 as (
+select *,
+CASE WHEN EnsekCreatedAtDate is null THEN 1
+WHEN GC_SL_Date_Difference > 2 THEN 1
+WHEN GC_SL_Date_Difference <= 2 THEN 0
+ELSE 1
+END as discrepancy_flag_day_1,
+CASE WHEN gcpaymentamount is not null or ensekpaymentsamount is not null THEN 'Payments'
+WHEN GCRefundAmount is not null or ensekRefundsAmount is not null THEN 'Refunds'
+ELSE 'NA'
+END as Event_Type
+from cte_report_summary_SL01
+)
 
 
 select *
-from cte_report_summary_GC01
+from cte_report_summary_GC02
+order by 1, 2, 3
 
-WITH NO SCHEMA BINDING
+
+    WITH NO SCHEMA BINDING
 ;
 
 alter table vw_fin_gc_to_sl_reconciliation owner to igloo
 ;
-
-
-
-
-
-
-
-
-
-
-
 
