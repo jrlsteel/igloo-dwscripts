@@ -1,3 +1,22 @@
+
+; with cte_report_dates as
+      (
+        select
+              date
+            , substring(date, 9, 10) + '/' + substring(date, 6, 2) + '/' + substring(date, 1, 4) as Report_Date
+            , substring(dateadd(day, -1, date::timestamp), 1, 10) as Report_Filter
+        from ref_date
+        where
+            month_name in ('January', 'April', 'July', 'October')
+        and day = 1
+        and year > 2016
+        and date <= substring(sysdate, 1, 10)
+      )
+
+
+
+
+
 select distinct
      supplier_name  ,
      date  ,
@@ -53,7 +72,7 @@ select distinct
      tariff_change_date
 
 from (select 'Igloo Energy'                   as supplier_name,
-             getdate()                        as date,
+             crd.Report_Date                  as date,
              '1-Elec'                         as tariff_uid,
              rth.tariff_name                     tariff_advertised_name,
              case
@@ -72,10 +91,7 @@ from (select 'Igloo Energy'                   as supplier_name,
                when mpa.attributes_attributevalue = '_N' then 'south_scotland'
                when mpa.attributes_attributevalue = '_P' then 'north_scotland'
                  end                          as region,
-             case
-               when mpa2.attributes_attributevalue = 1 then 'U'
-               else  'O'
-              end                             as meter_type,
+             'U'                              as meter_type,
              'S'                              as tariff_type,
              'E'                              as tariff_fuel_type,
              'D'                              as payment_method,
@@ -86,8 +102,28 @@ from (select 'Igloo Energy'                   as supplier_name,
              count(distinct(rthe.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
-             sthe.rate                        as standing_charge,
-             rthe.rate                        as single_rate_unit_rate,
+
+             ---sthe.rate                        as standing_charge,
+             19.841                      as standing_charge,
+
+             ---rthe.rate                        as single_rate_unit_rate,
+              CASE
+                  WHEN   mpa.attributes_attributevalue = '_A'  THEN  12.393
+                  WHEN   mpa.attributes_attributevalue = '_B'   THEN  12.064
+                  WHEN   mpa.attributes_attributevalue = '_C'    THEN  11.97
+                  WHEN   mpa.attributes_attributevalue = '_D'   THEN  13.192
+                  WHEN   mpa.attributes_attributevalue = '_E'   THEN  12.737
+                  WHEN   mpa.attributes_attributevalue = '_F'   THEN  12.427
+                  WHEN   mpa.attributes_attributevalue = '_G'   THEN  12.609
+                  WHEN   mpa.attributes_attributevalue = '_J'  THEN  12.861
+                  WHEN   mpa.attributes_attributevalue = '_N'  THEN  12.544
+                  WHEN   mpa.attributes_attributevalue = '_K'   THEN  12.961
+                  WHEN   mpa.attributes_attributevalue = '_L'   THEN  13.522
+                  WHEN   mpa.attributes_attributevalue = '_H'  THEN  12.564
+                  WHEN   mpa.attributes_attributevalue = '_M'   THEN  12.233
+                  ELSE 0.0
+              END                                as single_rate_unit_rate,
+
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
               null as   multi_tier_volume_break_3  ,
@@ -130,27 +166,29 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
              inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
              inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
+
+             right join cte_report_dates crd on substring(mp.supplystartdate, 1, 10) < crd.date
+                                             and substring(nvl(mp.supplyenddate, sysdate), 1, 10) > crd.Report_Filter
+
       where mpa.attributes_attributename = 'GSP'
         and mpa2.attributes_attributename = 'Profile Class'
-        and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+        --and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
         and rth.end_date is null
         and rthe.end_date is null
         and sthe.end_date is null
         and mp.meterpointtype = 'E'
-      group by rth.tariff_name,
-               rth.tariff_type,
-               mpa.attributes_attributevalue,
-               case
-               when mpa2.attributes_attributevalue = 1 then 'U'
-               else  'O'
-               end ,
-               sthe.rate,
-               rthe.rate
+      group by
+               crd.Report_Date,
+               rth.tariff_name,
+               --- rth.tariff_type,
+               mpa.attributes_attributevalue
+               ---- sthe.rate,
+               ---- rthe.rate
 
       union
 
       select 'Igloo Energy'                   as supplier_name,
-             getdate()                        as date,
+             crd.Report_Date                        as date,
              '1-Gas'                          as tariff_uid,
              rth.tariff_name                     tariff_advertised_name,
              case
@@ -180,8 +218,27 @@ from (select 'Igloo Energy'                   as supplier_name,
              count(distinct(rthe.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
-             sthe.rate                        as standing_charge,
-             rthe.rate                        as single_rate_unit_rate,
+
+             --- sthe.rate                        as standing_charge,
+             23.333                      as standing_charge,
+             ---rthe.rate                        as single_rate_unit_rate,
+             CASE
+                  WHEN   mpa.attributes_attributevalue = '_A'   THEN  2.765
+                  WHEN   mpa.attributes_attributevalue = '_B'   THEN  2.743
+                  WHEN   mpa.attributes_attributevalue = '_C'   THEN  2.891
+                  WHEN   mpa.attributes_attributevalue = '_D'   THEN  2.842
+                  WHEN   mpa.attributes_attributevalue = '_E'  THEN  2.778
+                  WHEN   mpa.attributes_attributevalue = '_F'   THEN  2.788
+                  WHEN   mpa.attributes_attributevalue = '_G'   THEN  2.81
+                  WHEN   mpa.attributes_attributevalue = '_J'  THEN  2.888
+                  WHEN   mpa.attributes_attributevalue = '_N'   THEN  2.854
+                  WHEN   mpa.attributes_attributevalue = '_K'   THEN  2.817
+                  WHEN   mpa.attributes_attributevalue = '_L'   THEN  2.911
+                  WHEN   mpa.attributes_attributevalue = '_H'   THEN  2.838
+                  WHEN   mpa.attributes_attributevalue = '_M'   THEN  2.819
+                  ELSE 0.0
+             END                          as single_rate_unit_rate,
+
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
               null as   multi_tier_volume_break_3  ,
@@ -223,15 +280,30 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
              inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
              inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
+
+            right join cte_report_dates crd on substring(mp.supplystartdate, 1, 10) < crd.date
+                                            and substring(nvl(mp.supplyenddate, sysdate), 1, 10) > crd.Report_Filter
       where mpa.attributes_attributename = 'GSP'
-        and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+        --and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
         and rth.end_date is null
         and rthe.end_date is null
         and sthe.end_date is null
         and mp.meterpointtype = 'G'
-      group by rth.tariff_name,
-               rth.tariff_type,
-               mpa.attributes_attributevalue,
-               sthe.rate,
-               rthe.rate)
-order by 3, 5;
+      group by
+               crd.Report_Date,
+               rth.tariff_name,
+               -- rth.tariff_type,
+               mpa.attributes_attributevalue
+               --- sthe.rate,
+               --- rthe.rate
+     )
+order by date::timestamp ,
+         tariff_advertised_name ,
+         tariff_uid ,
+         region
+;
+
+
+
+
+
