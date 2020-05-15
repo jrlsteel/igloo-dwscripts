@@ -16,6 +16,32 @@
 
 
 
+, cte_gsp as (
+                SELECT
+                  crd.date,
+                  rt.name,
+                  rt.fuel_type ,
+                  CASE
+                       WHEN rt.fuel_type = 'E' then '1-Elec'
+                       WHEN rt.fuel_type = 'G' then '1-Gas'
+                   END as  fuel_type_i  ,
+                  rt.gsp_ldz,
+                  max(rt.unit_rate) as unit_rate
+                FROM public.ref_tariffs rt
+                right join cte_report_dates crd on crd.date between substring(least(rt.signup_start_date, rt.billing_start_date), 1, 10)
+                                            and substring(nvl(rt.end_date, sysdate), 1, 10)
+
+                group by
+                  crd.date,
+                  rt.name,
+                  rt.fuel_type,
+                  rt.gsp_ldz
+                order by crd.date::timestamp
+                      ,2,3,4
+       )
+
+
+
 
 select distinct
      supplier_name  ,
@@ -105,7 +131,7 @@ from (select 'Igloo Energy'                   as supplier_name,
 
              ---sthe.rate                        as standing_charge,
              19.841                      as standing_charge,
-
+      /*
              ---rthe.rate                        as single_rate_unit_rate,
               CASE
                   WHEN   mpa.attributes_attributevalue = '_A'  THEN  12.393
@@ -123,7 +149,8 @@ from (select 'Igloo Energy'                   as supplier_name,
                   WHEN   mpa.attributes_attributevalue = '_M'   THEN  12.233
                   ELSE 0.0
               END                                as single_rate_unit_rate,
-
+       */
+              gsp.unit_rate                                as single_rate_unit_rate,
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
               null as   multi_tier_volume_break_3  ,
@@ -167,8 +194,14 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
              inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
 
-             right join cte_report_dates crd on substring(mp.supplystartdate, 1, 10) < crd.date
-                                             and substring(nvl(mp.supplyenddate, sysdate), 1, 10) > crd.Report_Filter
+             right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
+                            and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
+
+             left join cte_gsp gsp
+                        on gsp.name = rth.tariff_name
+                       and gsp.date = crd.date
+                       and gsp.fuel_type  = 'E'
+                       and gsp.gsp_ldz = mpa.attributes_attributevalue
 
       where mpa.attributes_attributename = 'GSP'
         and mpa2.attributes_attributename = 'Profile Class'
@@ -181,7 +214,8 @@ from (select 'Igloo Energy'                   as supplier_name,
                crd.Report_Date,
                rth.tariff_name,
                --- rth.tariff_type,
-               mpa.attributes_attributevalue
+               mpa.attributes_attributevalue,
+               gsp.unit_rate
                ---- sthe.rate,
                ---- rthe.rate
 
@@ -221,6 +255,8 @@ from (select 'Igloo Energy'                   as supplier_name,
 
              --- sthe.rate                        as standing_charge,
              23.333                      as standing_charge,
+
+      /*
              ---rthe.rate                        as single_rate_unit_rate,
              CASE
                   WHEN   mpa.attributes_attributevalue = '_A'   THEN  2.765
@@ -238,6 +274,8 @@ from (select 'Igloo Energy'                   as supplier_name,
                   WHEN   mpa.attributes_attributevalue = '_M'   THEN  2.819
                   ELSE 0.0
              END                          as single_rate_unit_rate,
+        */
+              gsp.unit_rate                                as single_rate_unit_rate,
 
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
@@ -281,8 +319,15 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
              inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
 
-            right join cte_report_dates crd on substring(mp.supplystartdate, 1, 10) < crd.date
-                                            and substring(nvl(mp.supplyenddate, sysdate), 1, 10) > crd.Report_Filter
+            right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
+                            and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
+
+            left join cte_gsp gsp
+                        on gsp.name = rth.tariff_name
+                       and gsp.date = crd.date
+                       and gsp.fuel_type  = 'G'
+                       and gsp.gsp_ldz = mpa.attributes_attributevalue
+
       where mpa.attributes_attributename = 'GSP'
         --and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
         and rth.end_date is null
@@ -293,10 +338,11 @@ from (select 'Igloo Energy'                   as supplier_name,
                crd.Report_Date,
                rth.tariff_name,
                -- rth.tariff_type,
-               mpa.attributes_attributevalue
+               mpa.attributes_attributevalue,
+               gsp.unit_rate
                --- sthe.rate,
                --- rthe.rate
-     )
+     ) stg
 order by date::timestamp ,
          tariff_advertised_name ,
          tariff_uid ,
