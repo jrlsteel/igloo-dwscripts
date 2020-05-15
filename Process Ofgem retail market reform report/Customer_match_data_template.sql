@@ -1,5 +1,23 @@
+ ; with cte_report_dates as
+      (
+        select
+              date
+            , substring(date, 9, 10) + '/' + substring(date, 6, 2) + '/' + substring(date, 1, 4) as Report_Date
+            , substring(dateadd(day, -1, date::timestamp), 1, 10) as Report_Filter
+        from ref_date
+        where
+            month_name in ('January', 'April', 'July', 'October')
+        and day = 1
+        and year > 2016
+        and date <= substring(sysdate, 1, 10)
+      )
+
+
+
+
+
       select 'Igloo Energy'                  as supplier_name,
-             '01/04/2020'                       as date,
+             nvl(crd.Report_Date, crd1.Report_Date)                       as date,
              '1-Gas'                         as gas_tariff_uid_1,
               null                           as gas_tariff_uid_2,
               null                           as gas_tariff_uid_3,
@@ -57,8 +75,20 @@
              inner join ref_tariff_history rth on mpa.account_id = rth.account_id
              inner join ref_meterpoints mp1 on mp.account_id = mp1.account_id
              inner join vw_acl_reg_gaselec_happy vreh on mp.account_id = vreh.account_id
-      WHERE mp.meterpointtype = 'E'
 
+             right join cte_report_dates crd on crd.date between substring(greatest(mp.supplystartdate, mp.associationstartdate), 1, 10)
+                            and substring(nvl(least(mp.supplyenddate, mp.associationenddate), sysdate), 1, 10)
+                            and mp.meterpointtype = 'E'
+
+            right join cte_report_dates crd1 on crd1.date between substring(greatest(mp1.supplystartdate, mp1.associationstartdate), 1, 10)
+                            and substring(nvl(least(mp1.supplyenddate, mp1.associationenddate), sysdate), 1, 10)
+                            and mp1.meterpointtype = 'G'
+
+
+      WHERE mp.meterpointtype = 'E'
+        and mp1.meterpointtype = 'G'
+        and mpa.attributes_attributename = 'GSP'
+     /*
         --- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
         and '2020-04-01' between substring(greatest(mp.supplystartdate, mp.associationstartdate), 1, 10)
                             and substring(nvl(least(mp.supplyenddate, mp.associationenddate), sysdate), 1, 10)
@@ -68,5 +98,7 @@
          and '2020-04-01' between substring(greatest(mp1.supplystartdate, mp1.associationstartdate), 1, 10)
                             and substring(nvl(least(mp1.supplyenddate, mp1.associationenddate), sysdate), 1, 10)
         and mpa.attributes_attributename = 'GSP'
-      group by mpa.attributes_attributevalue
+      */
+      group by nvl(crd.Report_Date, crd1.Report_Date), mpa.attributes_attributevalue
+      order by nvl(crd.Report_Date, crd1.Report_Date)::timestamp, mpa.attributes_attributevalue
       ;
