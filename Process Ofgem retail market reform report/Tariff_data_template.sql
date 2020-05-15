@@ -15,29 +15,57 @@
 
 
 
-
 , cte_gsp as (
-                SELECT
-                  crd.date,
-                  rt.name,
-                  rt.fuel_type ,
-                  CASE
-                       WHEN rt.fuel_type = 'E' then '1-Elec'
-                       WHEN rt.fuel_type = 'G' then '1-Gas'
-                   END as  fuel_type_i  ,
-                  rt.gsp_ldz,
-                  max(rt.unit_rate) as unit_rate
-                FROM public.ref_tariffs rt
-                right join cte_report_dates crd on crd.date between substring(least(rt.signup_start_date, rt.billing_start_date), 1, 10)
-                                            and substring(nvl(rt.end_date, sysdate), 1, 10)
 
-                group by
-                  crd.date,
-                  rt.name,
-                  rt.fuel_type,
-                  rt.gsp_ldz
-                order by crd.date::timestamp
-                      ,2,3,4
+    select
+         date,
+         name,
+         fuel_type ,
+         fuel_type_i  ,
+          gsp_ldz,
+          unit_rate
+     from
+              (
+               select
+                 date,
+                 name,
+                 fuel_type ,
+                 fuel_type_i  ,
+                  gsp_ldz,
+                  unit_rate,
+                  cnt,
+                  Row_Number() OVER (PARTITION BY date,
+                                                  name,
+                                                  fuel_type ,
+                                                  gsp_ldz ORDER BY cnt desc) rnk
+                 from
+                       (
+                        SELECT
+                          crd.date,
+                          rt.name,
+                          rt.fuel_type ,
+                          CASE
+                               WHEN rt.fuel_type = 'E' then '1-Elec'
+                               WHEN rt.fuel_type = 'G' then '1-Gas'
+                           END as  fuel_type_i  ,
+                          rt.gsp_ldz,
+                          rt.unit_rate,
+                         count(rt.unit_rate) as cnt
+                        FROM public.ref_tariffs rt
+                        right join cte_report_dates crd on crd.date between substring(least(rt.signup_start_date, rt.billing_start_date), 1, 10)
+                                                    and substring(nvl(rt.end_date, sysdate), 1, 10)
+
+                        group by
+                          crd.date,
+                          rt.name,
+                          rt.fuel_type,
+                          rt.gsp_ldz,
+                          rt.unit_rate
+                       ) stage1
+                   ) stage2
+       WHERE rnk = 1
+       order by date::timestamp, name, fuel_type, gsp_ldz
+
        )
 
 
