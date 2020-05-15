@@ -58,9 +58,15 @@
              inner join ref_meterpoints mp1 on mp.account_id = mp1.account_id
              inner join vw_acl_reg_gaselec_happy vreh on mp.account_id = vreh.account_id
       WHERE mp.meterpointtype = 'E'
-        and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+
+        --- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+        and '2020-04-01' between substring(greatest(mp.supplystartdate, mp.associationstartdate), 1, 10)
+                            and substring(nvl(least(mp.supplyenddate, mp.associationenddate), sysdate), 1, 10)
         and mp1.meterpointtype = 'G'
-        and (mp1.supplyenddate is null or mp1.supplyenddate > '2020-03-31')
+
+        -- and (mp1.supplyenddate is null or mp1.supplyenddate > '2020-03-31')
+         and '2020-04-01' between substring(greatest(mp1.supplystartdate, mp1.associationstartdate), 1, 10)
+                            and substring(nvl(least(mp1.supplyenddate, mp1.associationenddate), sysdate), 1, 10)
         and mpa.attributes_attributename = 'GSP'
       group by mpa.attributes_attributevalue
       ;
