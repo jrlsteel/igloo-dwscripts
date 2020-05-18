@@ -74,7 +74,7 @@
              inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
              inner join ref_tariff_history rth on mpa.account_id = rth.account_id
              inner join ref_meterpoints mp1 on mp.account_id = mp1.account_id
-             inner join vw_acl_reg_gaselec_happy vreh on mp.account_id = vreh.account_id
+             --- inner join vw_acl_reg_gaselec_happy vreh on mp.account_id = vreh.account_id
 
              right join cte_report_dates crd on crd.date between substring(greatest(mp.supplystartdate, mp.associationstartdate), 1, 10)
                             and substring(nvl(least(mp.supplyenddate, mp.associationenddate), sysdate), 1, 10)
