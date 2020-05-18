@@ -220,7 +220,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history rth on mpa.account_id = rth.account_id
              inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
              inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
-             inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
+             --- inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
 
              right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
                             and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
@@ -335,7 +335,7 @@ from (select 'Igloo Energy'                   as supplier_name,
               null as   online_discount ,
               0    as   termination_fee,
              null  as	fix_length,
-            '31/03/2017' as	tariff_offer_date,
+            '26/07/2017' as	tariff_offer_date,
             null as	tariff_withdraw_date,
             null as	tariff_expiry_date,
             '01/06/2019' as 	tariff_change_date
@@ -345,7 +345,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              inner join ref_tariff_history rth on mpa.account_id = rth.account_id
              inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
              inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
-             inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
+             --- inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
 
             right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
                             and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
