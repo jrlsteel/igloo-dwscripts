@@ -3,7 +3,7 @@
       (
         select
               date
-            , substring(date, 9, 10) + '/' + substring(date, 6, 2) + '/' + substring(date, 1, 4) as Report_Date
+            , substring(date, 9, 10) + '-' + substring(date, 6, 2) + '-' + substring(date, 1, 4) as Report_Date
             , substring(dateadd(day, -1, date::timestamp), 1, 10) as Report_Filter
         from ref_date
         where
