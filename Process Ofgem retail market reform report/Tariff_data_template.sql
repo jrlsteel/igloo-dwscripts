@@ -128,8 +128,8 @@ select distinct
 from (select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                  as date,
              '1-Elec'                         as tariff_uid,
-             'Igloo Pioneer'                  as tariff_advertised_name,
-             ----- rth.tariff_name                     tariff_advertised_name,
+             ----- 'Igloo Pioneer'                  as tariff_advertised_name,
+             rth.tariff_name                     tariff_advertised_name,
              case
                when dcf.gsp = '_A' then 'east_england'
                when dcf.gsp = '_B' then 'east_midlands'
@@ -159,7 +159,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
-             ---sthe.rate                        as standing_charge,
+             ---- sthe.rate                        as standing_charge,
              19.841                      as standing_charge,
       /*
              ---rthe.rate                        as single_rate_unit_rate,
@@ -180,6 +180,7 @@ from (select 'Igloo Energy'                   as supplier_name,
                   ELSE 0.0
               END                                as single_rate_unit_rate,
        */
+               ----rthe.rate                          as single_rate_unit_rate,
               gsp.unit_rate                                as single_rate_unit_rate,
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
@@ -219,7 +220,7 @@ from (select 'Igloo Energy'                   as supplier_name,
       FROM ref_calculated_daily_customer_file dcf
              --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
              --- inner join ref_meterpoints_attributes mpa2 on mp.account_id = mpa2.account_id
-             --- inner join ref_tariff_history rth on mpa.account_id = rth.account_id
+             left join ref_tariff_history rth on dcf.account_id = rth.account_id
              --- inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
              --- inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
              --- inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
@@ -227,9 +228,13 @@ from (select 'Igloo Energy'                   as supplier_name,
              right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
                             and substring(nvl( dcf.acc_ed , sysdate), 1, 10)
 
+            left join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
+                       and crd.date between substring( sthe.start_date , 1, 10)
+                            and substring(nvl( sthe.end_date, sysdate), 1, 10)
+
              left join cte_gsp gsp
-                        ---on gsp.name = rth.tariff_name
-                       on  gsp.date = crd.date
+                       on gsp.name = rth.tariff_name
+                       and  gsp.date = crd.date
                        and gsp.fuel_type  = 'E'
                        and gsp.gsp_ldz = dcf.gsp
 
@@ -244,20 +249,19 @@ from (select 'Igloo Energy'                   as supplier_name,
         ----- and mp.meterpointtype = 'E'
       group by
                crd.Report_Date,
-               --- rth.tariff_name,
+               rth.tariff_name,
                --- rth.tariff_type,
                dcf.gsp,
                gsp.unit_rate
-               ---- sthe.rate,
-               ---- rthe.rate
+
 
       union
 
       select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                        as date,
              '1-Gas'                          as tariff_uid,
-             'Igloo Pioneer'                  as tariff_advertised_name,
-             --- rth.tariff_name                     tariff_advertised_name,
+             ---'Igloo Pioneer'                  as tariff_advertised_name,
+             rth.tariff_name                     tariff_advertised_name,
              case
                when dcf.gsp = '_A' then 'east_england'
                when dcf.gsp = '_B' then 'east_midlands'
@@ -287,7 +291,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
-             --- sthe.rate                        as standing_charge,
+             ---- sthe.rate                        as standing_charge,
              23.333                      as standing_charge,
 
       /*
@@ -309,6 +313,7 @@ from (select 'Igloo Energy'                   as supplier_name,
                   ELSE 0.0
              END                          as single_rate_unit_rate,
         */
+              --- rthe.rate                        as single_rate_unit_rate,
               gsp.unit_rate                                as single_rate_unit_rate,
 
               null as   multi_tier_volume_break_1  ,
@@ -348,17 +353,21 @@ from (select 'Igloo Energy'                   as supplier_name,
 
       FROM ref_calculated_daily_customer_file dcf
              --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
-             --- inner join ref_tariff_history rth on mpa.account_id = rth.account_id
-             --- inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
-             --- inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
+             left join ref_tariff_history rth on dcf.account_id = rth.account_id
+             ---inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
+             ---inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
              --- inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
 
             right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
                             and substring(nvl( dcf.acc_ed, sysdate), 1, 10)
 
+            left join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
+                       and crd.date between substring( sthe.start_date , 1, 10)
+                            and substring(nvl( sthe.end_date, sysdate), 1, 10)
+
             left join cte_gsp gsp
-                        --- on gsp.name = rth.tariff_name
-                       on  gsp.date = crd.date
+                        on gsp.name = rth.tariff_name
+                       and  gsp.date = crd.date
                        and gsp.fuel_type  = 'G'
                        and gsp.gsp_ldz = dcf.gsp
 
@@ -372,12 +381,10 @@ from (select 'Igloo Energy'                   as supplier_name,
         ----- and mp.meterpointtype = 'G'
       group by
                crd.Report_Date,
-               --- rth.tariff_name,
+               rth.tariff_name,
                -- rth.tariff_type,
                dcf.gsp,
                gsp.unit_rate
-               --- sthe.rate,
-               --- rthe.rate
      ) stg
 order by date::timestamp ,
          tariff_advertised_name ,
