@@ -128,22 +128,24 @@ select distinct
 from (select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                  as date,
              '1-Elec'                         as tariff_uid,
-             rth.tariff_name                     tariff_advertised_name,
+             'Igloo Pioneer'                  as tariff_advertised_name,
+             ----- rth.tariff_name                     tariff_advertised_name,
              case
-               when mpa.attributes_attributevalue = '_A' then 'east_england'
-               when mpa.attributes_attributevalue = '_B' then 'east_midlands'
-               when mpa.attributes_attributevalue = '_C' then 'london'
-               when mpa.attributes_attributevalue = '_D' then 'merseyside_and_north_wales'
-               when mpa.attributes_attributevalue = '_E' then 'midlands'
-               when mpa.attributes_attributevalue = '_F' then 'north_east'
-               when mpa.attributes_attributevalue = '_G' then 'north_west'
-               when mpa.attributes_attributevalue = '_H' then 'southern'
-               when mpa.attributes_attributevalue = '_J' then 'south_east'
-               when mpa.attributes_attributevalue = '_K' then 'south_wales'
-               when mpa.attributes_attributevalue = '_L' then 'south_west'
-               when mpa.attributes_attributevalue = '_M' then 'yorkshire'
-               when mpa.attributes_attributevalue = '_N' then 'south_scotland'
-               when mpa.attributes_attributevalue = '_P' then 'north_scotland'
+               when dcf.gsp = '_A' then 'east_england'
+               when dcf.gsp = '_B' then 'east_midlands'
+               when dcf.gsp = '_C' then 'london'
+               when dcf.gsp = '_D' then 'merseyside_and_north_wales'
+               when dcf.gsp = '_E' then 'midlands'
+               when dcf.gsp = '_F' then 'north_east'
+               when dcf.gsp = '_G' then 'north_west'
+               when dcf.gsp = '_H' then 'southern'
+               when dcf.gsp = '_J' then 'south_east'
+               when dcf.gsp = '_K' then 'south_wales'
+               when dcf.gsp = '_L' then 'south_west'
+               when dcf.gsp = '_M' then 'yorkshire'
+               when dcf.gsp = '_N' then 'south_scotland'
+               when dcf.gsp = '_P' then 'north_scotland'
+               else dcf.gsp
                  end                          as region,
              'U'                              as meter_type,
              'S'                              as tariff_type,
@@ -153,7 +155,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              'Y'                              as paperless_billing,
              2.6                              as renewable_percentage,
              'N'                         as default_3_years, -- needs looking at
-             count(distinct(rthe.account_id)) as number_of_customer_accounts,
+             count(distinct(dcf.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
@@ -162,19 +164,19 @@ from (select 'Igloo Energy'                   as supplier_name,
       /*
              ---rthe.rate                        as single_rate_unit_rate,
               CASE
-                  WHEN   mpa.attributes_attributevalue = '_A'  THEN  12.393
-                  WHEN   mpa.attributes_attributevalue = '_B'   THEN  12.064
-                  WHEN   mpa.attributes_attributevalue = '_C'    THEN  11.97
-                  WHEN   mpa.attributes_attributevalue = '_D'   THEN  13.192
-                  WHEN   mpa.attributes_attributevalue = '_E'   THEN  12.737
-                  WHEN   mpa.attributes_attributevalue = '_F'   THEN  12.427
-                  WHEN   mpa.attributes_attributevalue = '_G'   THEN  12.609
-                  WHEN   mpa.attributes_attributevalue = '_J'  THEN  12.861
-                  WHEN   mpa.attributes_attributevalue = '_N'  THEN  12.544
-                  WHEN   mpa.attributes_attributevalue = '_K'   THEN  12.961
-                  WHEN   mpa.attributes_attributevalue = '_L'   THEN  13.522
-                  WHEN   mpa.attributes_attributevalue = '_H'  THEN  12.564
-                  WHEN   mpa.attributes_attributevalue = '_M'   THEN  12.233
+                  WHEN   dcf.gsp = '_A'  THEN  12.393
+                  WHEN   dcf.gsp = '_B'   THEN  12.064
+                  WHEN   dcf.gsp = '_C'    THEN  11.97
+                  WHEN   dcf.gsp = '_D'   THEN  13.192
+                  WHEN   dcf.gsp = '_E'   THEN  12.737
+                  WHEN   dcf.gsp = '_F'   THEN  12.427
+                  WHEN   dcf.gsp = '_G'   THEN  12.609
+                  WHEN   dcf.gsp = '_J'  THEN  12.861
+                  WHEN   dcf.gsp = '_N'  THEN  12.544
+                  WHEN   dcf.gsp = '_K'   THEN  12.961
+                  WHEN   dcf.gsp = '_L'   THEN  13.522
+                  WHEN   dcf.gsp = '_H'  THEN  12.564
+                  WHEN   dcf.gsp = '_M'   THEN  12.233
                   ELSE 0.0
               END                                as single_rate_unit_rate,
        */
@@ -214,35 +216,37 @@ from (select 'Igloo Energy'                   as supplier_name,
             null as	tariff_expiry_date,
             '01/06/2019' as 	tariff_change_date
 
-      FROM ref_meterpoints mp
-             inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
-             inner join ref_meterpoints_attributes mpa2 on mp.account_id = mpa2.account_id
-             inner join ref_tariff_history rth on mpa.account_id = rth.account_id
-             inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
-             inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
+      FROM ref_calculated_daily_customer_file dcf
+             --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
+             --- inner join ref_meterpoints_attributes mpa2 on mp.account_id = mpa2.account_id
+             --- inner join ref_tariff_history rth on mpa.account_id = rth.account_id
+             --- inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
+             --- inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
              --- inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
 
-             right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
-                            and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
+             right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
+                            and substring(nvl( dcf.acc_ed , sysdate), 1, 10)
 
              left join cte_gsp gsp
-                        on gsp.name = rth.tariff_name
-                       and gsp.date = crd.date
+                        ---on gsp.name = rth.tariff_name
+                       on  gsp.date = crd.date
                        and gsp.fuel_type  = 'E'
-                       and gsp.gsp_ldz = mpa.attributes_attributevalue
+                       and gsp.gsp_ldz = dcf.gsp
 
-      where mpa.attributes_attributename = 'GSP'
-        and mpa2.attributes_attributename = 'Profile Class'
-        --and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
-        and rth.end_date is null
-        and rthe.end_date is null
-        and sthe.end_date is null
-        and mp.meterpointtype = 'E'
+      where
+         dcf.supply_type in ('Elec', 'Dual')
+        ----- mpa.attributes_attributename = 'GSP'
+        ----- and mpa2.attributes_attributename = 'Profile Class'
+        ----- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+        ----- and rth.end_date is null
+        ----- and rthe.end_date is null
+        ----- and sthe.end_date is null
+        ----- and mp.meterpointtype = 'E'
       group by
                crd.Report_Date,
-               rth.tariff_name,
+               --- rth.tariff_name,
                --- rth.tariff_type,
-               mpa.attributes_attributevalue,
+               dcf.gsp,
                gsp.unit_rate
                ---- sthe.rate,
                ---- rthe.rate
@@ -252,22 +256,24 @@ from (select 'Igloo Energy'                   as supplier_name,
       select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                        as date,
              '1-Gas'                          as tariff_uid,
-             rth.tariff_name                     tariff_advertised_name,
+             'Igloo Pioneer'                  as tariff_advertised_name,
+             --- rth.tariff_name                     tariff_advertised_name,
              case
-               when mpa.attributes_attributevalue = '_A' then 'east_england'
-               when mpa.attributes_attributevalue = '_B' then 'east_midlands'
-               when mpa.attributes_attributevalue = '_C' then 'london'
-               when mpa.attributes_attributevalue = '_D' then 'merseyside_and_north_wales'
-               when mpa.attributes_attributevalue = '_E' then 'midlands'
-               when mpa.attributes_attributevalue = '_F' then 'north_east'
-               when mpa.attributes_attributevalue = '_G' then 'north_west'
-               when mpa.attributes_attributevalue = '_H' then 'southern'
-               when mpa.attributes_attributevalue = '_J' then 'south_east'
-               when mpa.attributes_attributevalue = '_K' then 'south_wales'
-               when mpa.attributes_attributevalue = '_L' then 'south_west'
-               when mpa.attributes_attributevalue = '_M' then 'yorkshire'
-               when mpa.attributes_attributevalue = '_N' then 'south_scotland'
-               when mpa.attributes_attributevalue = '_P' then 'north_scotland'
+               when dcf.gsp = '_A' then 'east_england'
+               when dcf.gsp = '_B' then 'east_midlands'
+               when dcf.gsp = '_C' then 'london'
+               when dcf.gsp = '_D' then 'merseyside_and_north_wales'
+               when dcf.gsp = '_E' then 'midlands'
+               when dcf.gsp = '_F' then 'north_east'
+               when dcf.gsp = '_G' then 'north_west'
+               when dcf.gsp = '_H' then 'southern'
+               when dcf.gsp = '_J' then 'south_east'
+               when dcf.gsp = '_K' then 'south_wales'
+               when dcf.gsp = '_L' then 'south_west'
+               when dcf.gsp = '_M' then 'yorkshire'
+               when dcf.gsp = '_N' then 'south_scotland'
+               when dcf.gsp = '_P' then 'north_scotland'
+               else dcf.gsp
                  end                          as region,
              'U'               as meter_type,
              'S'                        tariff_type,
@@ -277,7 +283,7 @@ from (select 'Igloo Energy'                   as supplier_name,
              'Y'                        as paperless_billing,
              0                                as renewable_percentage,
              'N'                         as default_3_years, -- needs looking at
-             count(distinct(rthe.account_id)) as number_of_customer_accounts,
+             count(distinct(dcf.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
@@ -287,19 +293,19 @@ from (select 'Igloo Energy'                   as supplier_name,
       /*
              ---rthe.rate                        as single_rate_unit_rate,
              CASE
-                  WHEN   mpa.attributes_attributevalue = '_A'   THEN  2.765
-                  WHEN   mpa.attributes_attributevalue = '_B'   THEN  2.743
-                  WHEN   mpa.attributes_attributevalue = '_C'   THEN  2.891
-                  WHEN   mpa.attributes_attributevalue = '_D'   THEN  2.842
-                  WHEN   mpa.attributes_attributevalue = '_E'  THEN  2.778
-                  WHEN   mpa.attributes_attributevalue = '_F'   THEN  2.788
-                  WHEN   mpa.attributes_attributevalue = '_G'   THEN  2.81
-                  WHEN   mpa.attributes_attributevalue = '_J'  THEN  2.888
-                  WHEN   mpa.attributes_attributevalue = '_N'   THEN  2.854
-                  WHEN   mpa.attributes_attributevalue = '_K'   THEN  2.817
-                  WHEN   mpa.attributes_attributevalue = '_L'   THEN  2.911
-                  WHEN   mpa.attributes_attributevalue = '_H'   THEN  2.838
-                  WHEN   mpa.attributes_attributevalue = '_M'   THEN  2.819
+                  WHEN   dcf.gsp = '_A'   THEN  2.765
+                  WHEN   dcf.gsp = '_B'   THEN  2.743
+                  WHEN   dcf.gsp = '_C'   THEN  2.891
+                  WHEN   dcf.gsp = '_D'   THEN  2.842
+                  WHEN   dcf.gsp = '_E'  THEN  2.778
+                  WHEN   dcf.gsp = '_F'   THEN  2.788
+                  WHEN   dcf.gsp = '_G'   THEN  2.81
+                  WHEN   dcf.gsp = '_J'  THEN  2.888
+                  WHEN   dcf.gsp = '_N'   THEN  2.854
+                  WHEN   dcf.gsp = '_K'   THEN  2.817
+                  WHEN   dcf.gsp = '_L'   THEN  2.911
+                  WHEN   dcf.gsp = '_H'   THEN  2.838
+                  WHEN   dcf.gsp = '_M'   THEN  2.819
                   ELSE 0.0
              END                          as single_rate_unit_rate,
         */
@@ -340,33 +346,35 @@ from (select 'Igloo Energy'                   as supplier_name,
             null as	tariff_expiry_date,
             '01/06/2019' as 	tariff_change_date
 
-      FROM ref_meterpoints mp
-             inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
-             inner join ref_tariff_history rth on mpa.account_id = rth.account_id
-             inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
-             inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
+      FROM ref_calculated_daily_customer_file dcf
+             --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
+             --- inner join ref_tariff_history rth on mpa.account_id = rth.account_id
+             --- inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
+             --- inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
              --- inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
 
-            right join cte_report_dates crd on crd.date between substring(greatest(supplystartdate, associationstartdate), 1, 10)
-                            and substring(nvl(least(supplyenddate, associationenddate), sysdate), 1, 10)
+            right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
+                            and substring(nvl( dcf.acc_ed, sysdate), 1, 10)
 
             left join cte_gsp gsp
-                        on gsp.name = rth.tariff_name
-                       and gsp.date = crd.date
+                        --- on gsp.name = rth.tariff_name
+                       on  gsp.date = crd.date
                        and gsp.fuel_type  = 'G'
-                       and gsp.gsp_ldz = mpa.attributes_attributevalue
+                       and gsp.gsp_ldz = dcf.gsp
 
-      where mpa.attributes_attributename = 'GSP'
-        --and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
-        and rth.end_date is null
-        and rthe.end_date is null
-        and sthe.end_date is null
-        and mp.meterpointtype = 'G'
+      where
+         dcf.supply_type in ('Gas', 'Dual')
+        ----- mpa.attributes_attributename = 'GSP'
+        ----- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
+        ----- and rth.end_date is null
+        ----- and rthe.end_date is null
+        ----- and sthe.end_date is null
+        ----- and mp.meterpointtype = 'G'
       group by
                crd.Report_Date,
-               rth.tariff_name,
+               --- rth.tariff_name,
                -- rth.tariff_type,
-               mpa.attributes_attributevalue,
+               dcf.gsp,
                gsp.unit_rate
                --- sthe.rate,
                --- rthe.rate
