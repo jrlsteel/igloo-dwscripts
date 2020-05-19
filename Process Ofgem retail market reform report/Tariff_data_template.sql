@@ -70,6 +70,50 @@
 
 
 
+, cte_tariff_change_date as (
+  select
+    stg.*,
+    substring(start_date, 9, 2) + '-' + substring(start_date, 6, 2) + '-' + substring(start_date, 1, 4) as tariff_change_date
+   from
+      (
+        select
+        tariff_id,
+        min (start_date) as start_date
+        FROM ref_calculated_tariff_accounts  ta
+        group by
+        tariff_id
+       ) stg
+    order by 1, 2
+)
+
+
+
+
+
+, cte_tariff_offer_date as (
+  select
+      stg.* ,
+       substring(signup_start_date, 9, 2) + '-' + substring(signup_start_date, 6, 2) + '-' + substring(signup_start_date, 1, 4) as tariff_change_date
+   from
+      (
+          select
+          fuel_type,
+          --gsp_ldz,
+          name,
+          min (billing_start_date) as billing_start_date,
+          min (signup_start_date) as signup_start_date
+          FROM ref_tariffs t
+          group by
+          fuel_type,
+          --gsp_ldz,
+          name
+      ) stg
+      order by
+      1
+)
+
+
+
 
 select distinct
      supplier_name  ,
@@ -85,10 +129,10 @@ select distinct
      paperless_billing  ,
      renewable_percentage  ,
      default_3_years  ,
-     number_of_customer_accounts  ,
+     number_of_customer_accounts ,
      is_multi_reg_tariff  ,
      is_multi_tier_tariff  ,
-     standing_charge  ,
+     standing_charge ,
      single_rate_unit_rate  ,
      multi_tier_volume_break_1  ,
      multi_tier_volume_break_2  ,
@@ -128,24 +172,23 @@ select distinct
 from (select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                  as date,
              '1-Elec'                         as tariff_uid,
-             ----- 'Igloo Pioneer'                  as tariff_advertised_name,
-             rth.tariff_name                     tariff_advertised_name,
+             t.name                    tariff_advertised_name,
              case
-               when dcf.gsp = '_A' then 'east_england'
-               when dcf.gsp = '_B' then 'east_midlands'
-               when dcf.gsp = '_C' then 'london'
-               when dcf.gsp = '_D' then 'merseyside_and_north_wales'
-               when dcf.gsp = '_E' then 'midlands'
-               when dcf.gsp = '_F' then 'north_east'
-               when dcf.gsp = '_G' then 'north_west'
-               when dcf.gsp = '_H' then 'southern'
-               when dcf.gsp = '_J' then 'south_east'
-               when dcf.gsp = '_K' then 'south_wales'
-               when dcf.gsp = '_L' then 'south_west'
-               when dcf.gsp = '_M' then 'yorkshire'
-               when dcf.gsp = '_N' then 'south_scotland'
-               when dcf.gsp = '_P' then 'north_scotland'
-               else dcf.gsp
+               when t.gsp_ldz = '_A' then 'east_england'
+               when t.gsp_ldz = '_B' then 'east_midlands'
+               when t.gsp_ldz = '_C' then 'london'
+               when t.gsp_ldz = '_D' then 'merseyside_and_north_wales'
+               when t.gsp_ldz = '_E' then 'midlands'
+               when t.gsp_ldz = '_F' then 'north_east'
+               when t.gsp_ldz = '_G' then 'north_west'
+               when t.gsp_ldz = '_H' then 'southern'
+               when t.gsp_ldz = '_J' then 'south_east'
+               when t.gsp_ldz = '_K' then 'south_wales'
+               when t.gsp_ldz = '_L' then 'south_west'
+               when t.gsp_ldz = '_M' then 'yorkshire'
+               when t.gsp_ldz = '_N' then 'south_scotland'
+               when t.gsp_ldz = '_P' then 'north_scotland'
+               else t.gsp_ldz
                  end                          as region,
              'U'                              as meter_type,
              'S'                              as tariff_type,
@@ -155,33 +198,15 @@ from (select 'Igloo Energy'                   as supplier_name,
              'Y'                              as paperless_billing,
              2.6                              as renewable_percentage,
              'N'                         as default_3_years, -- needs looking at
-             count(distinct(dcf.account_id)) as number_of_customer_accounts,
+             count(distinct(ta.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
-             ---- sthe.rate                        as standing_charge,
-             19.841                      as standing_charge,
-      /*
-             ---rthe.rate                        as single_rate_unit_rate,
-              CASE
-                  WHEN   dcf.gsp = '_A'  THEN  12.393
-                  WHEN   dcf.gsp = '_B'   THEN  12.064
-                  WHEN   dcf.gsp = '_C'    THEN  11.97
-                  WHEN   dcf.gsp = '_D'   THEN  13.192
-                  WHEN   dcf.gsp = '_E'   THEN  12.737
-                  WHEN   dcf.gsp = '_F'   THEN  12.427
-                  WHEN   dcf.gsp = '_G'   THEN  12.609
-                  WHEN   dcf.gsp = '_J'  THEN  12.861
-                  WHEN   dcf.gsp = '_N'  THEN  12.544
-                  WHEN   dcf.gsp = '_K'   THEN  12.961
-                  WHEN   dcf.gsp = '_L'   THEN  13.522
-                  WHEN   dcf.gsp = '_H'  THEN  12.564
-                  WHEN   dcf.gsp = '_M'   THEN  12.233
-                  ELSE 0.0
-              END                                as single_rate_unit_rate,
-       */
+              t.standing_charge                        as standing_charge,
+             ----19.841                      as standing_charge,
+
                ----rthe.rate                          as single_rate_unit_rate,
-              gsp.unit_rate                                as single_rate_unit_rate,
+              t.unit_rate                                as single_rate_unit_rate,
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
               null as   multi_tier_volume_break_3  ,
@@ -217,67 +242,52 @@ from (select 'Igloo Energy'                   as supplier_name,
             null as	tariff_expiry_date,
             '01/06/2019' as 	tariff_change_date
 
-      FROM ref_calculated_daily_customer_file dcf
-             --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
-             --- inner join ref_meterpoints_attributes mpa2 on mp.account_id = mpa2.account_id
-             left join ref_tariff_history rth on dcf.account_id = rth.account_id
-             --- inner join ref_tariff_history_elec_ur rthe on rth.account_id = rthe.account_id
-             --- inner join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
-             --- inner join vw_acl_reg_elec_happy vreh on mp.account_id = vreh.account_id
+      FROM ref_calculated_tariff_accounts  ta
+             inner join ref_tariffs t
+              on ta.tariff_id = t.id
+              and t.fuel_type = 'E'
 
-             right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
-                            and substring(nvl( dcf.acc_ed , sysdate), 1, 10)
+            right join cte_report_dates crd on crd.date between substring( t.billing_start_date , 1, 10)
+                            and substring(nvl( t.end_date, sysdate), 1, 10)
 
-            left join ref_tariff_history_elec_sc sthe on rth.account_id = sthe.account_id
-                       and crd.date between substring( sthe.start_date , 1, 10)
-                            and substring(nvl( sthe.end_date, sysdate), 1, 10)
+            left join cte_tariff_offer_date tod
+                      on tod.fuel_type = t.fuel_type
+                      and tod.name = t.name
 
-             left join cte_gsp gsp
-                       on gsp.name = rth.tariff_name
-                       and  gsp.date = crd.date
-                       and gsp.fuel_type  = 'E'
-                       and gsp.gsp_ldz = dcf.gsp
 
-      where
-         dcf.supply_type in ('Elec', 'Dual')
-        ----- mpa.attributes_attributename = 'GSP'
-        ----- and mpa2.attributes_attributename = 'Profile Class'
-        ----- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
-        ----- and rth.end_date is null
-        ----- and rthe.end_date is null
-        ----- and sthe.end_date is null
-        ----- and mp.meterpointtype = 'E'
       group by
                crd.Report_Date,
-               rth.tariff_name,
+               t.name ,
                --- rth.tariff_type,
-               dcf.gsp,
-               gsp.unit_rate
+               t.gsp_ldz,
+               t.unit_rate,
+               t.standing_charge
 
 
       union
 
+
+
       select 'Igloo Energy'                   as supplier_name,
              crd.Report_Date                        as date,
              '1-Gas'                          as tariff_uid,
-             ---'Igloo Pioneer'                  as tariff_advertised_name,
-             rth.tariff_name                     tariff_advertised_name,
+             t.name                    tariff_advertised_name,
              case
-               when dcf.gsp = '_A' then 'east_england'
-               when dcf.gsp = '_B' then 'east_midlands'
-               when dcf.gsp = '_C' then 'london'
-               when dcf.gsp = '_D' then 'merseyside_and_north_wales'
-               when dcf.gsp = '_E' then 'midlands'
-               when dcf.gsp = '_F' then 'north_east'
-               when dcf.gsp = '_G' then 'north_west'
-               when dcf.gsp = '_H' then 'southern'
-               when dcf.gsp = '_J' then 'south_east'
-               when dcf.gsp = '_K' then 'south_wales'
-               when dcf.gsp = '_L' then 'south_west'
-               when dcf.gsp = '_M' then 'yorkshire'
-               when dcf.gsp = '_N' then 'south_scotland'
-               when dcf.gsp = '_P' then 'north_scotland'
-               else dcf.gsp
+               when t.gsp_ldz = '_A' then 'east_england'
+               when t.gsp_ldz = '_B' then 'east_midlands'
+               when t.gsp_ldz = '_C' then 'london'
+               when t.gsp_ldz = '_D' then 'merseyside_and_north_wales'
+               when t.gsp_ldz = '_E' then 'midlands'
+               when t.gsp_ldz = '_F' then 'north_east'
+               when t.gsp_ldz = '_G' then 'north_west'
+               when t.gsp_ldz = '_H' then 'southern'
+               when t.gsp_ldz = '_J' then 'south_east'
+               when t.gsp_ldz = '_K' then 'south_wales'
+               when t.gsp_ldz = '_L' then 'south_west'
+               when t.gsp_ldz = '_M' then 'yorkshire'
+               when t.gsp_ldz = '_N' then 'south_scotland'
+               when t.gsp_ldz = '_P' then 'north_scotland'
+               else t.gsp_ldz
                  end                          as region,
              'U'               as meter_type,
              'S'                        tariff_type,
@@ -287,34 +297,16 @@ from (select 'Igloo Energy'                   as supplier_name,
              'Y'                        as paperless_billing,
              0                                as renewable_percentage,
              'N'                         as default_3_years, -- needs looking at
-             count(distinct(dcf.account_id)) as number_of_customer_accounts,
+             count(distinct(ta.account_id)) as number_of_customer_accounts,
              'N'                         as is_multi_reg_tariff,
              'N'                         as is_multi_tier_tariff,
 
-             ---- sthe.rate                        as standing_charge,
-             23.333                      as standing_charge,
+              t.standing_charge                      as standing_charge,
+             ----- 23.333                      as standing_charge,
 
-      /*
-             ---rthe.rate                        as single_rate_unit_rate,
-             CASE
-                  WHEN   dcf.gsp = '_A'   THEN  2.765
-                  WHEN   dcf.gsp = '_B'   THEN  2.743
-                  WHEN   dcf.gsp = '_C'   THEN  2.891
-                  WHEN   dcf.gsp = '_D'   THEN  2.842
-                  WHEN   dcf.gsp = '_E'  THEN  2.778
-                  WHEN   dcf.gsp = '_F'   THEN  2.788
-                  WHEN   dcf.gsp = '_G'   THEN  2.81
-                  WHEN   dcf.gsp = '_J'  THEN  2.888
-                  WHEN   dcf.gsp = '_N'   THEN  2.854
-                  WHEN   dcf.gsp = '_K'   THEN  2.817
-                  WHEN   dcf.gsp = '_L'   THEN  2.911
-                  WHEN   dcf.gsp = '_H'   THEN  2.838
-                  WHEN   dcf.gsp = '_M'   THEN  2.819
-                  ELSE 0.0
-             END                          as single_rate_unit_rate,
-        */
+
               --- rthe.rate                        as single_rate_unit_rate,
-              gsp.unit_rate                                as single_rate_unit_rate,
+              t.unit_rate                                as single_rate_unit_rate,
 
               null as   multi_tier_volume_break_1  ,
               null as   multi_tier_volume_break_2  ,
@@ -351,41 +343,23 @@ from (select 'Igloo Energy'                   as supplier_name,
             null as	tariff_expiry_date,
             '01/06/2019' as 	tariff_change_date
 
-      FROM ref_calculated_daily_customer_file dcf
-             --- inner join ref_meterpoints_attributes mpa on mp.account_id = mpa.account_id
-             left join ref_tariff_history rth on dcf.account_id = rth.account_id
-             ---inner join ref_tariff_history_gas_ur rthe on rth.account_id = rthe.account_id
-             ---inner join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
-             --- inner join vw_acl_reg_gas_happy vreh on mp.account_id = vreh.account_id
+      FROM ref_calculated_tariff_accounts  ta
+             inner join ref_tariffs t
+              on ta.tariff_id = t.id
+              and t.fuel_type = 'G'
 
-            right join cte_report_dates crd on crd.date between substring( dcf.acc_ssd , 1, 10)
-                            and substring(nvl( dcf.acc_ed, sysdate), 1, 10)
+            right join cte_report_dates crd on crd.date between substring( t.billing_start_date , 1, 10)
+                            and substring(nvl( t.end_date, sysdate), 1, 10)
 
-            left join ref_tariff_history_gas_sc sthe on rth.account_id = sthe.account_id
-                       and crd.date between substring( sthe.start_date , 1, 10)
-                            and substring(nvl( sthe.end_date, sysdate), 1, 10)
-
-            left join cte_gsp gsp
-                        on gsp.name = rth.tariff_name
-                       and  gsp.date = crd.date
-                       and gsp.fuel_type  = 'G'
-                       and gsp.gsp_ldz = dcf.gsp
-
-      where
-         dcf.supply_type in ('Gas', 'Dual')
-        ----- mpa.attributes_attributename = 'GSP'
-        ----- and (mp.supplyenddate is null or mp.supplyenddate > '2020-03-31')
-        ----- and rth.end_date is null
-        ----- and rthe.end_date is null
-        ----- and sthe.end_date is null
-        ----- and mp.meterpointtype = 'G'
       group by
                crd.Report_Date,
-               rth.tariff_name,
-               -- rth.tariff_type,
-               dcf.gsp,
-               gsp.unit_rate
+               t.name ,
+               --- rth.tariff_type,
+               t.gsp_ldz,
+               t.unit_rate,
+               t.standing_charge
      ) stg
+
 order by date::timestamp ,
          tariff_advertised_name ,
          tariff_uid ,
