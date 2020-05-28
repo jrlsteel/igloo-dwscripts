@@ -24,11 +24,12 @@ create table ref_calculated_metering_portfolio_gas_report as
          mp_gas.meterpointnumber           as mprn,
          mp_gas.meterpointtype,
          smef.deviceid,
-         smef."firmware version",
+         smef.firmware_version,
          smef.manufacturer,
          smef.type,
-         smef."device status",
-         smef."commisioned date",
+         smef.device_status,
+         smef.commisioned_date,
+         smef.tariff,
          accs.billdayofmonth,
          accs.nextbilldate,
          mt_gas.meter_id,
@@ -84,7 +85,7 @@ create table ref_calculated_metering_portfolio_gas_report as
          left outer join vw_metering_report_reads_info vmri
            on mp_gas.account_id = vmri.account_id and reg_elec.register_id = vmri.register_id
          left outer join aws_met_stage1_extracts.met_igloo_smart_metering_estate_firmware smef
-           on mp_gas.meterpointnumber = smef."mpxn number" --and smef.device_status <> 'InstalledNotCommissioned'
+           on mp_gas.meterpointnumber = smef.mpxn_number --and smef.device_status <> 'InstalledNotCommissioned'
          left outer join vw_supply_contracts_with_occ_accs vscoa on mp_gas.account_id = vscoa.external_id
          left outer join ref_cdb_addresses rca on vscoa.supply_address_id = rca.id
          left outer join vw_metering_report_read_schedule vmrrs on vscoa.external_id = vmrrs.external_id
@@ -114,11 +115,12 @@ create table ref_calculated_metering_portfolio_gas_report as
            th.tariff_name,
            mp_gas.meterpointtype,
            smef.deviceid,
-           smef."firmware version",
+           smef.firmware_version,
            smef.manufacturer,
            smef.type,
-           smef."device status",
-           smef."commisioned date",
+           smef.device_status,
+           smef.commisioned_date,
+           smef.tariff,
            mp_gas.supplystartdate,
            mp_gas.associationstartdate,
            mp_gas.issmart,
