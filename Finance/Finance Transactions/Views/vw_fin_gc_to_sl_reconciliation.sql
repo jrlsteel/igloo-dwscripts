@@ -19,10 +19,13 @@ and substring (events_a.created_at, 1, 10) between '2017-01-01' and to_char(sysd
 
 , cte_ensek as (
 select *,
-CASE WHEN substring (createddate, 9, 2)::int < 26
-     THEN substring (createddate, 1, 7)
-     ELSE substring(dateadd(month, 1, createddate), 1, 7)
-END as payout_month
+CASE WHEN substring (createddate, 9, 2)::int >= 26 AND substring (createddate, 7, 2)::int = 2
+THEN substring (dateadd(month, 1, createddate::timestamp), 1, 7)
+WHEN substring (createddate, 9, 2)::int >= 26 AND substring (createddate, 7, 2)::int != 2
+THEN substring (dateadd(month, 1, createddate::timestamp), 1, 7)
+ELSE substring (createddate, 1, 7)
+END as payout_month,
+substring (createddate, 1, 7) as Event_Month
 from aws_fin_stage1_extracts.fin_sales_ledger_all_time
 where nominal = '7603'
 and substring (createddate, 1, 10) between '2017-01-01' and to_char(sysdate, 'YYYY-MM-DD')
@@ -66,7 +69,17 @@ payments.payout,
 payouts.payout_id,
 events_payout.payout_month,
 client.client_id as customers_id,
-lkp.igl_acc_id as ensekAccountId
+lkp.igl_acc_id as ensekAccountId,
+
+CASE WHEN substring (payments.charge_date, 9, 2)::int >= 25 AND substring (payments.charge_date, 7, 2)::int = 2
+THEN substring (dateadd(month, 1, payments.charge_date::timestamp), 1, 7)
+WHEN substring (payments.charge_date, 9, 2)::int >= 25 AND substring (payments.charge_date, 7, 2)::int != 2
+THEN substring (dateadd(month, 1, payments.charge_date::timestamp), 1, 7)
+ELSE substring (payments.charge_date, 1, 7)
+END as payout_month_ml,
+
+substring (payments.charge_date, 1, 7) as Event_Month
+
 from cte_events_payout as events_payout
 inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
 inner join aws_fin_stage1_extracts.fin_go_cardless_api_payments payments on payments.id = events.payment
@@ -114,7 +127,17 @@ payouts.payout_id,
 events_payout.payout_month,
 man.mandate_id,
 client.client_id as customers_id,
-lkp.igl_acc_id as ensekAccountId
+lkp.igl_acc_id as ensekAccountId,
+
+CASE WHEN substring (refunds.created_at, 9, 2)::int >= 26 AND substring (refunds.created_at, 7, 2)::int = 2
+THEN substring (dateadd(month, 1, refunds.created_at::timestamp), 1, 7)
+WHEN substring (refunds.created_at, 9, 2)::int >= 26 AND substring (refunds.created_at, 7, 2)::int != 2
+THEN substring (dateadd(month, 1, refunds.created_at::timestamp), 1, 7)
+ELSE substring (refunds.created_at, 1, 7)
+END as payout_month_ml,
+
+substring (refunds.created_at, 1, 7) as Event_Month
+
 from cte_events_payout as events_payout
 inner join aws_fin_stage1_extracts.fin_go_cardless_api_events events on events_payout.id = events.parent_event
 inner join aws_fin_stage1_extracts.fin_go_cardless_api_refunds refunds on events.refund = refunds.id
@@ -287,10 +310,10 @@ select
 ensekAccountId,
 created_at,
 charge_date as Payment_ChargeDate,
-payout_month,
+Event_Month as payout_month,
 amount,
 row_number() over (partition by ensekAccountId,
-payout_month, amount order by gc.created_at asc) as Countif
+Event_Month, amount order by gc.created_at asc) as Countif
 from cte_payments gc
 where (ensekAccountId is not null)
 )
@@ -300,10 +323,10 @@ select
 ensekAccountId,
 events_created_at,
 substring (refunds_created_at, 1, 10) as refunds_created_at,
-payout_month,
+Event_Month as payout_month,
 amount,
 row_number() over (partition by ensekAccountId,
-payout_month, amount order by refunds_created_at asc) as Countif
+Event_Month, amount order by refunds_created_at asc) as Countif
 from cte_refundsSettled
 where (ensekAccountId is not null)
 )
@@ -313,11 +336,20 @@ select
 AccountId,
 CreatedDate,
 payout_month,
+round((((TransAmount + (0.005 * sign(TransAmount))) * 100)::int) / 100.0, 2) as TransAmount,
+Countif
+from
+(
+select
+AccountId,
+CreatedDate,
+Event_Month as payout_month,
 TransAmount,
-row_number() over (partition by AccountId, payout_month, TransAmount
+row_number() over (partition by AccountId, Event_Month, TransAmount
 order by accounttransactionid asc) as Countif
 from cte_ensek
 where (AccountId is not null)
+) ezk
 )
 
 
@@ -374,9 +406,15 @@ from cte_payments_summ gc
 left join cte_ensek_summ ensek
 on gc.ensekAccountId = ensek.AccountId and
 gc.amount = ensek.TransAmount and
-gc.payout_month = ensek.payout_month and
+(
+gc.payout_month = ensek.payout_month or
+(
+substring (dateadd(month, 1, gc.Payment_ChargeDate::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, gc.Payment_ChargeDate::timestamp, ensek.createddate::timestamp) < 25
+)
+) and
 gc.Countif = ensek.Countif and
-substring (gc.created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10)
+substring (gc.created_at, 1, 10)::timestamp <= substring (ensek.CreatedDate::timestamp, 1, 10)
 
 )
 
@@ -394,9 +432,15 @@ from cte_refunds_summ gc
 left join cte_ensek_summ ensek
 on gc.ensekAccountId = ensek.AccountId and
 (gc.amount * -1.0) = ensek.TransAmount and
-gc.payout_month = ensek.payout_month and
+(
+gc.payout_month = ensek.payout_month or
+(
+substring (dateadd(month, 1, gc.refunds_created_at::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, gc.refunds_created_at::timestamp, ensek.createddate::timestamp) < 25
+)
+) and
 gc.Countif = ensek.Countif and
-substring (gc.refunds_created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10) and
+substring (gc.refunds_created_at, 1, 10)::timestamp <= substring (ensek.CreatedDate::timestamp, 1, 10) and
 ensek.TransAmount < 0 ---- REFUNDS ONLY ----
 )
 
@@ -426,16 +470,30 @@ from cte_ensek_summ ensek
 left join cte_refunds_summ ref
 on ref.ensekAccountId = ensek.AccountId and
 (ref.amount * -1.0) = ensek.TransAmount and
-ref.payout_month = ensek.payout_month and
+---- ref.payout_month = ensek.payout_month and
+(
+ref.payout_month = ensek.payout_month or
+(
+substring (dateadd(month, 1, ref.refunds_created_at ::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, ref.refunds_created_at::timestamp, ensek.createddate::timestamp) < 25
+)
+) and
 ref.Countif = ensek.Countif and
-substring (ref.refunds_created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10) and
+substring (ref.refunds_created_at, 1, 10)::timestamp <= substring (ensek.CreatedDate::timestamp, 1, 10) and
 ensek.TransAmount < 0 ---- REFUNDS ONLY ----
 left join cte_payments_summ paym
 on paym.ensekAccountId = ensek.AccountId and
 paym.amount = ensek.TransAmount and
-paym.payout_month = ensek.payout_month and
+-----paym.payout_month = ensek.payout_month and
+(
+paym.payout_month = ensek.payout_month or
+(
+substring (dateadd(month, 1, paym.Payment_ChargeDate ::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, paym.Payment_ChargeDate::timestamp, ensek.createddate::timestamp) < 25
+)
+) and
 paym.Countif = ensek.Countif and
-substring (paym.created_at, 1, 10)::timestamp >= substring (ensek.CreatedDate::timestamp, 1, 10)
+substring (paym.created_at, 1, 10)::timestamp <= substring (ensek.CreatedDate::timestamp, 1, 10)
 )
 
 
@@ -603,7 +661,14 @@ from cte_GoCardless_refunds_tab ref
 left join cte_ensek_payments_tab ensek
 on ensek.accountid = GC.ensekAccountId
 and ensek.transamount = GC.GCAmount
-and ensek.payout_month = GC.payout_month
+---and ensek.payout_month = GC.payout_month
+and (
+ensek.payout_month = GC.payout_month or
+(
+substring (dateadd(month, 1, nvl(GC.GCPayment_ChargeDate, GC.GCRefund_Date) ::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, nvl(GC.GCPayment_ChargeDate, GC.GCRefund_Date)::timestamp, ensek.createddate::timestamp) < 25
+)
+)
 and ensek.Countif = GC.Countif
 order by 1, 2
 
@@ -669,7 +734,14 @@ from cte_GoCardless_refunds_tab ref
 right join cte_ensek_payments_tab ensek
 on ensek.accountid = GC.ensekAccountId
 and ensek.transamount = GC.GCAmount
-and ensek.payout_month = GC.payout_month
+--- and ensek.payout_month = GC.payout_month
+and (
+ensek.payout_month = GC.payout_month or
+(
+substring (dateadd(month, 1, nvl(GC.GCPayment_ChargeDate, GC.GCRefund_Date) ::timestamp), 1, 7) = ensek.payout_month
+and datediff(days, nvl(GC.GCPayment_ChargeDate, GC.GCRefund_Date)::timestamp, ensek.createddate::timestamp) < 25
+)
+)
 and ensek.Countif = GC.Countif
 order by 1, 2
 
