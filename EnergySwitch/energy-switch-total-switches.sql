@@ -99,7 +99,7 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Withdrawn',
                            'Tracker.Registration.Cancelled.In.Cooling.Off')
                         group by account_id) rsme on rsme.account_id = mp.account_id
-where mp.supplystartdate between '2019-04-01' and '2019-06-30'
+where mp.supplystartdate between '2019-10-01' and '2019-12-31'
 order by account_id, meterpoint_type
 ) ens
 -- where week_days = 'non-working-days' and day_of_week in(5,6,0)
@@ -149,9 +149,8 @@ from ref_cdb_supply_contracts su
                            'Tracker.Registration.Withdrawn',
                            'Tracker.Registration.Cancelled.In.Cooling.Off')
                         group by account_id) rse on rse.account_id = mp.account_id
-where mp.supplystartdate between '2019-01-01' and '2019-03-31'
-order by ensek_id, meterpoint_type
--- ) ens
+where mp.supplystartdate between '2019-10-01' and '2019-12-31'
+order by ensek_id, meterpoint_type) ens
 -- where switch_days_createdat < 21
 ;
 
