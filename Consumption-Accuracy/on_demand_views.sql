@@ -87,36 +87,32 @@ select st.account_id,
        st.meter_removed_date,
        st.register_id,
        st.no_of_digits,
-       st.read_min_datetime_elec                                                         as read_min_datetime_elec,
-       st.read_max_datetime_elec                                                         as read_max_datetime_elec,
-       st.read_min_readings_elec                                                         as read_min_readings_elec,
-       st.read_max_readings_elec                                                         as read_max_readings_elec,
-       datediff(months, st.read_min_datetime_elec, st.read_max_datetime_elec)            as read_months_diff_elec,
-       coalesce(datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec), 0) as read_days_diff_elec,
-       st.ppc_count                                                                      as no_of_ppc_rows,
-       st.bpp_count                                                                      as no_of_bpp_rows,
+       st.read_min_datetime_elec                                                                     as read_min_datetime_elec,
+       st.read_max_datetime_elec                                                                     as read_max_datetime_elec,
+       st.read_min_readings_elec                                                                     as read_min_readings_elec,
+       st.read_max_readings_elec                                                                     as read_max_readings_elec,
+       datediff(months, st.read_min_datetime_elec,
+                st.read_max_datetime_elec)                                                           as read_months_diff_elec,
+       coalesce(datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec),
+                0)                                                                                   as read_days_diff_elec,
+       cppc_close.cumulative_ppc_count - cppc_open.cumulative_ppc_count                              as no_of_ppc_rows,
+       0::bigint                                                                                     as no_of_bpp_rows,
        st.read_consumption_elec,
        st.profile_class,
        st.tpr,
-       st.ppc,
-       st.bpp,
-       st.smooth_param                                                                   as sp,
-       st.total_reads                                                                    as total_reads,
-       register_eac_elec                                                                 as industry_eac_register,
-       st.previous_eac                                                                   as previous_ind_eac_estimates,
-       st.latest_eac                                                                     as latest_ind_eac_estimates,
-       case
-           when ppc is null or no_of_ppc_rows < datediff(days, st.read_min_datetime_elec, st.read_max_datetime_elec)
-               then
-               round(calculate_igl_ind_eac(coalesce(st.smooth_param, 0), coalesce(st.bpp, 0),
-                                           coalesce(st.read_consumption_elec, 0),
-                                           coalesce(st.previous_eac, 0)), 1)
-           else
-               round(calculate_igl_ind_eac(coalesce(st.smooth_param, 0), coalesce(st.ppc, 0),
-                                           coalesce(st.read_consumption_elec, 0),
-                                           coalesce(st.previous_eac, 0)), 1) end
-                                                                                         as igl_ind_eac,
-       getdate()                                                                         as etlchange
+       (cppc_close.cumulative_ppc - cppc_open.cumulative_ppc) * read_days_diff_elec / no_of_ppc_rows as ppc,
+       0::double precision                                                                           as bpp,
+       st.smooth_param                                                                               as sp,
+       st.total_reads                                                                                as total_reads,
+       register_eac_elec                                                                             as industry_eac_register,
+       st.previous_eac                                                                               as previous_ind_eac_estimates,
+       st.latest_eac                                                                                 as latest_ind_eac_estimates,
+
+       round(calculate_igl_ind_eac(coalesce(st.smooth_param, 0),
+                                   coalesce(ppc, 0),
+                                   coalesce(st.read_consumption_elec, 0),
+                                   coalesce(st.previous_eac, 0)), 1)                                 as igl_ind_eac,
+       getdate()                                                                                     as etlchange
 from (select mp_elec.account_id                   as account_id,
              mp_elec.meter_point_id               as meterpoint_id,
              mp_elec.supplyenddate                as supplyend_date,
@@ -133,41 +129,7 @@ from (select mp_elec.account_id                   as account_id,
              coalesce(max(read_valid.corrected_reading) - min(read_valid.corrected_reading),
                       0)                          as read_consumption_elec,
              rma_pcl.attributes_attributevalue    as profile_class,
-             reg_elec.registers_tpr               as tpr,
-             (select sum(ppc_sum)
-              from ref_d18_igloo_ppc
-              where gsp_group_id = rma_gsp.attributes_attributevalue
-                and ss_conf_id = rma_ssc.attributes_attributevalue
-                and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
-                and pcl_id = cast(rma_pcl.attributes_attributevalue as integer)
-                and st_date >= trunc(min(read_valid.meterreadingdatetime))
-                and st_date < trunc(max(read_valid.meterreadingdatetime))
-              group by gsp_group_id, ss_conf_id)  as ppc,
-             (select count(*)
-              from ref_d18_igloo_ppc
-              where gsp_group_id = rma_gsp.attributes_attributevalue
-                and ss_conf_id = rma_ssc.attributes_attributevalue
-                and cast(time_pattern_regime as bigint) = reg_elec.registers_tpr
-                and pcl_id = cast(rma_pcl.attributes_attributevalue as integer)
-                and st_date >= trunc(min(read_valid.meterreadingdatetime))
-                and st_date < trunc(max(read_valid.meterreadingdatetime))
-              group by gsp_group_id)              as ppc_count,
-             (select sum(bpp_sum)
-              from ref_d18_igloo_bpp
-              where gsp_group_id = rma_gsp.attributes_attributevalue
-                and pcl_id = cast(rma_pcl.attributes_attributevalue as integer)
-                and pfl_id = 1
-                and st_date >= trunc(min(read_valid.meterreadingdatetime))
-                and st_date < trunc(max(read_valid.meterreadingdatetime))
-              group by gsp_group_id)              as bpp,
-             (select count(*)
-              from ref_d18_igloo_bpp
-              where gsp_group_id = rma_gsp.attributes_attributevalue
-                and pcl_id = cast(rma_pcl.attributes_attributevalue as integer)
-                and pfl_id = 1
-                and st_date >= trunc(min(read_valid.meterreadingdatetime))
-                and st_date < trunc(max(read_valid.meterreadingdatetime))
-              group by gsp_group_id)              as bpp_count,
+             reg_elec.registers_tpr::bigint       as tpr,
              2                                    as smooth_param,
              read_valid.total_reads               as total_reads,
              coalesce(read_valid.previous_eac, 0) as previous_eac,
@@ -213,10 +175,8 @@ from (select mp_elec.account_id                   as account_id,
                                                             y.registerreference = ee.register_id
                                                              and y.meterserialnumber = ee.serial_number and
                                                             ee.effective_from = y.meterreadingdatetime
-                                where y.n <= 2
-      ) read_valid
-                               on read_valid.account_id = mp_elec.account_id and
-                                  read_valid.register_id = reg_elec.register_id
+                                where y.n <= 2) read_valid on read_valid.account_id = mp_elec.account_id and
+                                                              read_valid.register_id = reg_elec.register_id
 
       where mp_elec.meterpointtype = 'E'
         and (mp_elec.supplyenddate is null or mp_elec.supplyenddate > getdate())
@@ -233,6 +193,16 @@ from (select mp_elec.account_id                   as account_id,
                read_valid.previous_eac,
                read_valid.latest_eac,
                read_valid.register_id) st
+         left join ref_cumulative_ppc cppc_open on cppc_open.ppc_date = st.read_min_datetime_elec and
+                                                   cppc_open.gsp = st.elec_GSP and
+                                                   cppc_open.ssc = st.elec_ssc and
+                                                   cppc_open.tpr = st.tpr and
+                                                   cppc_open.pcl = st.profile_class
+         left join ref_cumulative_ppc cppc_close on cppc_open.ppc_date = st.read_max_datetime_elec and
+                                                    cppc_open.gsp = st.elec_GSP and
+                                                    cppc_open.ssc = st.elec_ssc and
+                                                    cppc_open.tpr = st.tpr and
+                                                    cppc_open.pcl = st.profile_class
 ;
 -- view to link the on demand annualised consumption and igl_ind_eac views
 drop view vw_cons_acc_elec_on_demand;
@@ -684,16 +654,17 @@ FROM (SELECT ri.account_id,
              ri.readingvalue,
              ri.registerreference,
              ri.required,
-             COALESCE((rega.registersattributes_attributevalue)::integer, 0)                                                                           AS no_of_digits,
+             COALESCE((rega.registersattributes_attributevalue)::integer, 0)                             AS no_of_digits,
              COALESCE(pg_catalog.lead(ri.readingvalue, 1)
                       OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC),
-                      (0)::double precision)                                                                                                           AS previous_reading,
-             COALESCE(ri.readingvalue, (0)::double precision)                                                                                          AS current_reading,
+                      (0)::double precision)                                                             AS previous_reading,
+             COALESCE(ri.readingvalue, (0)::double precision)                                            AS current_reading,
              (power((10)::double precision,
                     (COALESCE((rega.registersattributes_attributevalue)::integer, 0))::double precision) -
-              (1)::double precision)                                                                                                                   AS max_reading,
+              (1)::double precision)                                                                     AS max_reading,
              "max"(ri.readingvalue)
-             OVER ( PARTITION BY ri.account_id, ri.register_id ORDER BY ri.meterreadingdatetime DESC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS max_previous_reading
+             OVER ( PARTITION BY ri.account_id, ri.register_id
+                 ORDER BY ri.meterreadingdatetime DESC ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS max_previous_reading
       FROM (ref_readings_internal_pa ri
                LEFT JOIN ref_registers_attributes rega
                          ON ((((rega.register_id = ri.register_id) AND (rega.account_id = ri.account_id)) AND
@@ -707,3 +678,129 @@ FROM (SELECT ri.account_id,
 alter table vw_corrected_round_clock_reading_pa
     owner to igloo;
 
+
+-- register-level eac parameters
+-- create table temp_eac_calc_params as
+truncate table temp_eac_calc_params;
+insert into temp_eac_calc_params
+with cte_current_mp_attr as (select account_id,
+                                    meter_point_id,
+                                    attributes_attributename,
+                                    max(attributes_attributevalue)    as attributes_attributevalue,
+                                    count(*)                          as num_records,
+                                    max(attributes_effectivefromdate) as attributes_effectivefromdate,
+                                    min(attributes_effectivetodate)   as attributes_effectivetodate
+                             from ref_meterpoints_attributes
+                             where (attributes_effectivefromdate is null or attributes_effectivefromdate <= getdate())
+                               and (attributes_effectivetodate is null or attributes_effectivetodate > getdate())
+                             group by account_id, meter_point_id, attributes_attributename)
+select mp.account_id,
+       mp.meter_point_id,
+       met.meter_id,
+       reg.register_id,
+       mp.meterpointnumber,
+       met.meterserialnumber             as meter_serial,
+       rma_gsp.attributes_attributevalue as gsp,
+       rma_ssc.attributes_attributevalue as ssc,
+       reg.registers_tpr::bigint         as tpr,
+       rma_pcl.attributes_attributevalue as pcl,
+       2                                 as smooth_param,
+       est_elec.estimation_value         as prev_ind_eac,
+       prev_read.meterreadingdatetime    as prev_read_date,
+       prev_read.readingvalue            as prev_read_value,
+       prev_cppc.cumulative_ppc          as prev_read_cppc,
+       prev_cppc.cumulative_ppc_count    as prev_read_cppc_count,
+       today_cppc.cumulative_ppc         as today_cppc,
+       today_cppc.cumulative_ppc_count   as today_cppc_count,
+       getdate()                         as etlchange
+from ref_meterpoints mp
+         inner join ref_meters met on mp.account_id = met.account_id and
+                                      mp.meter_point_id = met.meter_point_id and
+                                      met.removeddate is null
+         inner join ref_registers reg on reg.account_id = met.account_id and
+                                         reg.meter_point_id = met.meter_point_id and
+                                         reg.meter_id = met.meter_id and
+                                         reg.registers_tprperioddescription is not null
+         left join cte_current_mp_attr rma_gsp on rma_gsp.account_id = mp.account_id and
+                                                  rma_gsp.meter_point_id = mp.meter_point_id and
+                                                  rma_gsp.attributes_attributename = 'GSP'
+         left join cte_current_mp_attr rma_ssc on rma_ssc.account_id = mp.account_id and
+                                                  rma_ssc.meter_point_id = mp.meter_point_id and
+                                                  rma_ssc.attributes_attributename = 'SSC'
+         left join cte_current_mp_attr rma_pcl on rma_pcl.account_id = mp.account_id and
+                                                  rma_pcl.meter_point_id = mp.meter_point_id and
+                                                  rma_pcl.attributes_attributename = 'Profile Class'
+         left join (select *,
+                           row_number() over (
+                               partition by account_id, mpan, serial_number, register_id
+                               order by effective_from desc) as rn
+                    from ref_estimates_elec_internal) est_elec on est_elec.account_id = mp.account_id and
+                                                                  est_elec.mpan = mp.meterpointnumber and
+                                                                  est_elec.register_id = reg.registers_registerreference and
+                                                                  est_elec.serial_number = met.meterserialnumber and
+                                                                  est_elec.rn = 1
+         left join (select account_id,
+                           meterpointnumber,
+                           meterserialnumber,
+                           registerreference,
+                           meterreadingdatetime,
+                           min(readingvalue) as readingvalue
+                    from ref_readings_internal_valid
+                    group by account_id,
+                             meterpointnumber,
+                             meterserialnumber,
+                             registerreference,
+                             meterreadingdatetime) prev_read on est_elec.account_id = prev_read.account_id and
+                                                                est_elec.mpan = prev_read.meterpointnumber and
+                                                                est_elec.register_id = prev_read.registerreference and
+                                                                est_elec.serial_number = prev_read.meterserialnumber and
+                                                                trunc(est_elec.effective_from) =
+                                                                trunc(prev_read.meterreadingdatetime)
+         left join ref_cumulative_ppc prev_cppc on trunc(prev_cppc.ppc_date) = trunc(prev_read.meterreadingdatetime) and
+                                                   prev_cppc.gsp = rma_gsp.attributes_attributevalue and
+                                                   prev_cppc.ssc = rma_ssc.attributes_attributevalue and
+                                                   prev_cppc.tpr = reg.registers_tpr::bigint and
+                                                   prev_cppc.pcl = rma_pcl.attributes_attributevalue
+         left join ref_cumulative_ppc today_cppc on trunc(today_cppc.ppc_date) = trunc(getdate()) and
+                                                    today_cppc.gsp = rma_gsp.attributes_attributevalue and
+                                                    today_cppc.ssc = rma_ssc.attributes_attributevalue and
+                                                    today_cppc.tpr = reg.registers_tpr::bigint and
+                                                    today_cppc.pcl = rma_pcl.attributes_attributevalue
+where nvl(least(mp.supplyenddate, mp.associationenddate), getdate() + 1) > getdate()
+  and mp.meterpointtype = 'E'
+
+
+select *
+from temp_eac_calc_params
+where account_id in (
+    select account_id
+    from temp_eac_calc_params
+    group by account_id, meter_point_id, meter_id, register_id
+    having count(*) > 1)
+
+
+
+select *,
+       row_number() over (
+           partition by account_id, mpan, serial_number, register_id
+           order by effective_from desc) as rn
+from ref_estimates_elec_internal
+
+
+select distinct attributes_attributename
+from ref_meterpoints_attributes
+
+select distinct registers_registerreference
+from ref_registers_raw
+
+select *
+from ref_registers_raw
+where registers_tprperioddescription is null
+
+select *
+from ref_registers
+where account_id = 69947
+
+
+select max(len(pcl))
+from temp_eac_calc_params
