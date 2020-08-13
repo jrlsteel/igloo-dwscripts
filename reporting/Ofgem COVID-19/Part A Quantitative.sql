@@ -16,59 +16,83 @@ create or replace view vw_ofgem_covid19_part_a_quantitative as
            round(value_energy_theft.total, 2)                                    as value_energy_theft,
            eng_visits.total::int                                                 as num_emergency_visits,
            failed_visits.total::int                                              as covid_failed_visits
-    from (select monday                                                                   as week_commencing,
-                 sum(acc_live::int)                                                       as num_on_supply,
-                 sum(has_active_subscription::int)                                        as total_dd_instructions,
-                 sum(occ_acc_sunday::int)                                                 as occ_accs_sunday,
-                 sum((man_canc_in_window and psr)::int)                                   as psr_dd_cancellations,
-                 sum((man_canc_in_window)::int)                                           as dd_cancellations,
-                 sum(((current_dd < monthly_usage_sterling) and dd_amended and psr)::int) as psr_low_dd,
-                 sum(((current_dd < monthly_usage_sterling) and dd_amended)::int)         as low_dd,
-                 sum((dd_failure and psr)::int)                                           as psr_dd_fail,
-                 sum(dd_failure::int)                                                     as dd_fail,
+    from (select monday                                                                              as week_commencing,
+                 sum(acc_live::int)                                                                  as num_on_supply,
+                 sum(has_active_subscription::int)                                                   as total_dd_instructions,
+                 sum(occ_acc_sunday::int)                                                            as occ_accs_sunday,
+                 sum((man_canc_in_window and psr)::int)                                              as psr_dd_cancellations,
+                 sum((man_canc_in_window)::int)                                                      as dd_cancellations,
+                 sum(((current_dd < monthly_usage_sterling) and dd_amended and psr)::int)            as psr_low_dd,
+                 sum(((current_dd < monthly_usage_sterling) and dd_amended)::int)                    as low_dd,
+                 sum(((current_dd < monthly_usage_sterling) and dd_amended and psr and
+                      not wu_removed)::int)                                                          as psr_pay_hol,
+                 sum(((current_dd < monthly_usage_sterling) and dd_amended and not wu_removed)::int) as pay_hol,
+                 sum(case
+                         when ((current_dd < monthly_usage_sterling) and dd_amended and psr and not wu_removed)
+                             then (monthly_usage_sterling - current_dd)
+                         else 0 end)                                                                 as psr_pay_hol_pounds,
+                 sum(case
+                         when ((current_dd < monthly_usage_sterling) and dd_amended and not wu_removed)
+                             then (monthly_usage_sterling - current_dd)
+                         else 0 end)                                                                 as pay_hol_pounds,
+                 sum((dd_failure and psr)::int)                                                      as psr_dd_fail,
+                 sum(dd_failure::int)                                                                as dd_fail,
                  round(sum(((current_dd >= monthly_usage_sterling) and psr)::int)::double precision * 100 /
-                       nullif(sum(psr::int), 0)::double precision)                        as psr_correct_dd,
+                       nullif(sum(psr::int), 0)::double precision)                                   as psr_correct_dd,
                  round(sum((current_dd >= monthly_usage_sterling)::int)::double precision * 100 /
-                       nullif(num_on_supply, 0)::double precision)                        as correct_dd,
+                       nullif(num_on_supply, 0)::double precision)                                   as correct_dd,
                  sum((occ_acc_sunday and first_bill_date <= dateadd(month, -1, sunday) and
-                      not pay_in_month)::int)                                             as occ_acc_pay_fail,
+                      not pay_in_month)::int)                                                        as occ_acc_pay_fail,
                  sum((psr and occ_acc_sunday and first_bill_date <= dateadd(month, -1, sunday) and
-                      not pay_in_month)::int)                                             as psr_occ_acc_pay_fail,
-                 sum(credit)                                                              as customer_credit_sunday,
-                 sum(arrears)                                                             as customer_arrears_sunday
+                      not pay_in_month)::int)                                                        as psr_occ_acc_pay_fail,
+                 sum(credit)                                                                         as customer_credit_sunday,
+                 sum(arrears)                                                                        as customer_arrears_sunday
           from (with date_range as (select dateadd(second, -1, date) as sunday, date_trunc('week', sunday) as monday
                                     from public.ref_date
                                     where day_name = 'Monday'
                                       and date between '2016-01-01' and getdate())
-                select dcf.account_id,
-                       up.user_id,
-                       dcf.account_status != 'Cancelled' and
-                       dcf.acc_ssd <= date_range.sunday and
-                       nvl(acc_ed, getdate() + 1000) >= date_range.sunday                        as acc_live,
-                       dcf.days_as_occ_acc is not null and
-                       date_range.sunday between dcf.acc_ssd and (dcf.acc_ssd + days_as_occ_acc) as occ_acc_sunday,
-                       attr_psr.attribute_custom_value is not null                               as psr,
-                       ((num_elec_mpns * vlr.elec_sc * 365) + (eac_igloo_ca * vlr.elec_ur)) * 0.01 *
-                       1.05 / -- VLR needs to be updated to something that accounts for timespan
-                       12                                                                        as elec_monthly_usage_sterling,
-                       ((num_gas_mpns * vlr.gas_sc * 365) + (aq_igloo_ca * vlr.gas_ur)) * 0.01 * 1.05 /
-                       12                                                                        as gas_monthly_usage_sterling,
-                       nvl(elec_monthly_usage_sterling, 0) +
-                       nvl(gas_monthly_usage_sterling, 0)                                        as monthly_usage_sterling,
-                       nvl(gc_info.has_active_subscriptions::int, 0)                             as has_active_subscription,
-                       nvl(gc_info.subscription_amount, 0)                                       as current_dd,
-                       nvl(gc_info.dd_fail, false)                                               as dd_failure,
-                       nvl(gc_info.man_canc_in_window and (has_active_subscription = 0), false)  as man_canc_in_window,
-                       nvl(gc_info.sub_updated_in_window, false)                                         as dd_amended,
-                       date_range.monday,
-                       date_range.sunday,
-                       dcf.first_bill_date,
-                       dcf.latest_bill_date,
-                       nvl(payment_in_month.num_payments, 0) > 0                                 as pay_in_month,
-                       acc_balance.currentbalance + current_dd                                   as balance_floating_floor,
-                       greatest(0, balance_floating_floor)                                       as arrears,
-                       least(0, balance_floating_floor)                                          as credit
-                from public.ref_calculated_daily_customer_file dcf
+                select distinct dcf.account_id,
+                                up.user_id,
+                                dcf.account_status != 'Cancelled' and
+                                dcf.acc_ssd <= date_range.sunday and
+                                nvl(acc_ed, getdate() + 1000) >= date_range.sunday                        as acc_live,
+                                dcf.days_as_occ_acc is not null and
+                                date_range.sunday between dcf.acc_ssd and (dcf.acc_ssd + days_as_occ_acc) as occ_acc_sunday,
+                                attr_psr.attribute_custom_value is not null                               as psr,
+                                ((num_elec_mpns * vlr.elec_sc * 365) + (eac_igloo_ca * vlr.elec_ur)) * 0.01 *
+                                1.05 / -- VLR needs to be updated to something that accounts for timespan
+                                12                                                                        as elec_monthly_usage_sterling,
+                                ((num_gas_mpns * vlr.gas_sc * 365) + (aq_igloo_ca * vlr.gas_ur)) * 0.01 * 1.05 /
+                                12                                                                        as gas_monthly_usage_sterling,
+                                nvl(elec_monthly_usage_sterling, 0) +
+                                nvl(gas_monthly_usage_sterling, 0)                                        as monthly_usage_sterling,
+                                nvl(gc_info.has_active_subscriptions::int, 0)                             as has_active_subscription,
+                                nvl(gc_info.subscription_amount, 0)                                       as current_dd,
+                                nvl(gc_info.dd_fail, false)                                               as dd_failure,
+                                nvl(gc_info.man_canc_in_window and (has_active_subscription = 0),
+                                    false)                                                                as man_canc_in_window,
+                                nvl(gc_info.sub_updated_in_window, false)                                 as dd_amended,
+                                date_range.monday,
+                                date_range.sunday,
+                                dcf.first_bill_date,
+                                dcf.latest_bill_date,
+                                nvl(payment_in_month.num_payments, 0) > 0                                 as pay_in_month,
+                                acc_balance.currentbalance + current_dd                                   as balance_floating_floor,
+                                greatest(0, balance_floating_floor)                                       as arrears,
+                                least(0, balance_floating_floor)                                          as credit,
+                                pay_lay.amount is not null                                                as wu_removed
+                from (select distinct account_id,
+                                      account_status,
+                                      acc_ssd,
+                                      acc_ed,
+                                      days_as_occ_acc,
+                                      eac_igloo_ca,
+                                      num_elec_mpns,
+                                      num_gas_mpns,
+                                      aq_igloo_ca,
+                                      first_bill_date,
+                                      latest_bill_date
+                      from public.ref_calculated_daily_customer_file) dcf
                          left join date_range on true
                          left join (select tran_ids.account_id,
                                            tran_ids.sunday,
@@ -151,7 +175,11 @@ create or replace view vw_ofgem_covid19_part_a_quantitative as
                                                           man_cancellations.mandate = canc_man.mandate_id
                                     group by all_ids.igl_acc_id, date_range.monday, date_range.sunday) gc_info
                                    on gc_info.igl_acc_id = dcf.account_id and
-                                      date_range.sunday = gc_info.sunday) account_figures
+                                      date_range.sunday = gc_info.sunday
+                         left join aws_s3_stage2_extracts.stage2_cdbpaymentlayers pay_lay
+                                   on pay_lay.supply_contract_id = sc.id and
+                                      pay_lay.payment_type_id = 5 and
+                                      pay_lay.effective_to between date_range.monday and date_range.sunday) account_figures
           where acc_live
           group by monday
          ) account_portfolio_summaries
@@ -337,6 +365,50 @@ VALUES (DEFAULT, 1, '2020-03-30 00:00:00', '2020-03-30 23:59:59', '882', DEFAULT
        (DEFAULT, 2, '2020-04-14 00:00:00', '2020-04-14 23:59:59', '37', DEFAULT, DEFAULT)
 
 
-select * from aws_fin_stage1_extracts.fin_go_cardless_api_payments where created_at between '2020-05-04' and '2020-05-11' order by created_at
+select *
+from aws_fin_stage1_extracts.fin_go_cardless_api_payments
+where created_at between '2020-05-04' and '2020-05-11'
+order by created_at
 
-select distinct action from aws_fin_stage1_extracts.fin_go_cardless_api_events where resource_type = 'payments'
+select distinct action
+from aws_fin_stage1_extracts.fin_go_cardless_api_events
+where resource_type = 'payments'
+
+
+select id, count(*)
+from ref_account_transactions
+group by id
+having count(*) > 1
+
+
+with cte_query as (select account_id, '2020-06-07'::timestamp as sunday from vw_latest_rates_ensek)
+select account_id, count(*)
+from cte_query
+where trunc(sunday) = '2020-06-07'
+group by account_id
+having count(*) > 1
+
+
+with cte_query as (select supply_contract_id       as account_id,
+                          '2020-06-01':: timestamp as monday,
+                          '2020-06-07'::timestamp  as sunday
+                   from aws_s3_stage2_extracts.stage2_cdbpaymentlayers
+                   where effective_to between monday and sunday
+                     and payment_type_id = 5)
+select account_id, count(*)
+from cte_query
+-- where trunc(sunday) = '2020-06-07'
+group by account_id
+having count(*) > 1
+;
+
+ref_cdb_attributes attr_psr on attr_psr.attribute_type_id = 17 and
+                                                                         attr_psr.attribute_custom_value != '[]' and
+                                                                         attr_psr.effective_from <= date_range.sunday and
+                                                                         nvl(attr_psr.effective_to, getdate() + 1000) > date_range.sunday and
+                                                                         attr_psr.entity_id = sc.id
+
+ left join aws_s3_stage2_extracts.stage2_cdbpaymentlayers pay_lay
+                                   on pay_lay.supply_contract_id = sc.id and
+                                      pay_lay.payment_type_id = 5 and
+                                      pay_lay.effective_to between date_range.monday and date_range.sunday) account_figures
