@@ -51,3 +51,23 @@ order by account_id;
 # select *
 # from meets_signup_groups
 # where account_id = 54977
+
+
+### TESTING ###
+
+select account_id, assigned_group
+from meets_signup_groups
+where existing_control = 0 and existing_treatment = 0
+
+select distinct assigned_group
+from meets_signup_groups
+where existing_control > existing_treatment
+
+select distinct assigned_group
+from meets_signup_groups
+where existing_control < existing_treatment
+
+select sum(assigned_group = 'Control') as num_control,
+       sum(assigned_group = 'Treatment') as num_treat
+from meets_signup_groups
+where existing_control = existing_treatment
