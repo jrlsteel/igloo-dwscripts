@@ -1,4 +1,13 @@
-select u.id           as user_id,
+select u.zendesk_id,
+       bih.id         as bih_id,
+       u.id           as user_id,
+       r.id           as reg_id,
+       uc.id          as user_changes_id,
+       a.id           as attr_id,
+
+       null           as BREAK,
+
+       u.id           as user_id,
        u.first_name,
        u.last_name,
        u.email,
@@ -33,7 +42,7 @@ select u.id           as user_id,
        bih.data,
        bih.outcome,
 
-       a.id as attr_id,
+       a.id           as attr_id,
        a.attribute_type_id,
        a.attribute_value_id,
        a.attribute_custom_value
@@ -49,23 +58,6 @@ from users u
          left join broker_import_history bih on bs.broker_urn = bih.broker_urn
          left join attributes a
                    on a.attribute_type_id in (1, 9, 21, 24) and a.entity_id = u.id # these types are all user-linked
-where u.email like '%REMOVED_[zendesk_id]@example.org'
+where u.email like '%REMOVED_[zendesk_ticket_id]@example.org'
    or u.email like '[customer_email]%'
 order by account_status
-
-delete from attributes where entity_id in (127366) and attribute_type_id in (1, 9, 21, 24)
-UPDATE registrations t
-SET t.email        = 'REMOVED_1191895@example.org',
-    t.phone_number = 'REMOVED_1191895'
-WHERE t.id in (136944)
-UPDATE users t
-SET t.email = concat(t.id, '_REMOVED_1191895@example.org'),
-    t.phone_number = 'REMOVED_1191895',
-	t.mobile_number = 'REMOVED_1191895',
-	t.password = 'REMOVED_1191895',
-	t.date_of_birth = null
-WHERE t.id in (127366)
-
-
-
-
