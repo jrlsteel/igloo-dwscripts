@@ -33,6 +33,7 @@ VALUES (222, 'E', '_A', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 21.56
        (247, 'G', '_M', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 24.833, 2.264, null, 'variable', null);
 
 
+truncate table ref_tariffs;
 INSERT INTO ref_tariffs (id, fuel_type, gsp_ldz, name, billing_start_date, signup_start_date, end_date, standing_charge,
                          unit_rate, discounts, tariff_type, exit_fees) VALUES
 (1, 'E', '_A', 'Igloo Pioneer', '2017-04-03', '2017-04-03', '2017-07-23', 20, 11.911, null, 'variable', null)
@@ -260,4 +261,4 @@ INSERT INTO ref_tariffs (id, fuel_type, gsp_ldz, name, billing_start_date, signu
 ,(244, 'E', '_L', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 21.562, 14.807, null, 'variable', null)
 ,(245, 'G', '_L', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 24.833, 2.381, null, 'variable', null)
 ,(246, 'E', '_M', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 21.562, 13.395, null, 'variable', null)
-,(247, 'G', '_M', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 24.833, 2.264,null, 'variable', null)
+,(247, 'G', '_M', 'Igloo Pioneer', '2020-10-15', '2020-09-15', null, 24.833, 2.264,null, 'variable', null);
