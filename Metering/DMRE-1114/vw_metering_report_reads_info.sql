@@ -16,10 +16,11 @@ select max(
        y.corrected_reading,
        y.total_reads
 from (select r.*,
-             dense_rank() over (partition by account_id, register_id order by meterreadingdatetime desc) n,
-             count(*) over (partition by account_id, register_id)                                        total_reads
+             row_number() over (partition by account_id, register_id
+                 order by meterreadingdatetime, meterreadingcreateddate desc) n,
+             count(*) over (partition by account_id, register_id)             total_reads
       from ref_readings_internal_valid r) y
-         left outer join ref_estimates_elec_internal ee
+         left outer join (select distinct * from ref_estimates_elec_internal) ee
                          on ee.account_id = y.account_id
                              and y.meterpointnumber = ee.mpan
                              and y.registerreference = ee.register_id
