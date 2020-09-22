@@ -28,3 +28,5 @@ from (select r.*,
                              and ee.effective_from = y.meterreadingdatetime
                              and ee.islive
 where y.n <= 1;
+
+alter table vw_metering_report_reads_info owner to igloo;
