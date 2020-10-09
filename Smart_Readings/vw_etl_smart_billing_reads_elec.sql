@@ -80,18 +80,27 @@ create or replace view "vw_etl_smart_billing_reads_elec" as
         select *, row_number() over (partition by account_id, mpxn order by timestamp desc) as RowID
         from cte_qry1
     )
-    select distinct deviceid          as ManualMeterReadingId,
-                    account_id        as accountID,
-                    timestamp         as meterReadingDateTime,
-                    type              as meterType,
-                    mpxn              as meterPointNumber,
-                    meter_id          as meter,
-                    register_id       as register,
-                    total_consumption as reading,
-                    'SMART'           as source,
-                    NULL              as createdBy,
-                    next_bill_date
-    from cte_qry2
+       ,
+        cte_mpxn_mpid_mapping as (
+            select account_id, meterpointnumber, max(meter_point_id) as meter_point_id
+            from public.ref_meterpoints
+            group by account_id, meterpointnumber
+        )
+    select distinct cq2.deviceid                as ManualMeterReadingId,
+                    cq2.account_id              as accountID,
+                    cq2.timestamp               as meterReadingDateTime,
+                    cq2.type                    as meterType,
+--                     cq2.mpxn              as meterPointNumber,
+                    temp_mapping.meter_point_id as meterPointNumber,
+                    cq2.meter_id                as meter,
+                    cq2.register_id             as register,
+                    cq2.total_consumption       as reading,
+                    'SMART'                     as source,
+                    NULL                        as createdBy,
+                    cq2.next_bill_date
+    from cte_qry2 cq2
+             left join cte_mpxn_mpid_mapping temp_mapping on cq2.account_id = temp_mapping.account_id and
+                                                             cq2.mpxn = temp_mapping.meterpointnumber
     where RowID = 1
     with no schema binding;
 
