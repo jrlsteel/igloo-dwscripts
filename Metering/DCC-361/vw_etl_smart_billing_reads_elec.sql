@@ -1,4 +1,4 @@
-create or replace view vw_etl_weather_forecast_hourly as
+create or replace view  vw_etl_smart_billing_reads_elec as
 with cte_smart_meters as (
     /*
       Filter for only smart meters
