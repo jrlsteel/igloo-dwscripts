@@ -72,7 +72,7 @@ create or replace view vw_etl_smart_billing_reads_elec as
                                                      group by meter_id) stg
                                                where stg.cnt > 1)
                      and rrsd.register_num = 1
-                     and round(rrsd.total_consumption) = rrsd.register_value
+                     and floor(rrsd.total_consumption) = rrsd.register_value
                    order by 1, 2, 3)
     , cte_qry2 as (
       select *, row_number() over (partition by account_id, mpxn order by timestamp desc) as RowID
