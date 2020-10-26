@@ -1,4 +1,3 @@
-;
 with cte_report_dates as
     (
         select date as raw_date
@@ -102,39 +101,3 @@ from (select crd.raw_date,
 
 group by raw_date, elec_region, gas_region
 order by raw_date, electricity_tariff_uid_1, gas_tariff_uid_1, elec_region, gas_region
-;
-
-
-with cte_report_dates as (
-    select date                        as raw_date,
-           to_char(date, 'DD-MM-YYYY') as formatted_date
-    from ref_date
-    where month_name in ('January', 'April', 'July', 'October')
-      and day = 1
-      and year >= 2017
-      and date <= getdate()
-)
-   , cte_tariff_accounts_full as (
-    select ta.account_id,
-           ta.start_date,
-           ta.end_date,
-           t.fuel_type,
-           t.gsp_ldz
-    from ref_calculated_tariff_accounts ta
-             inner join ref_tariffs t on ta.tariff_id = t.id
-)
-select raw_date,
-       elec_region,
-       gas_region,
-       count(*) as num_accounts
-
-from (select crd.raw_date,
-             ta.account_id,
-             max(case when fuel_type = 'E' then gsp_ldz end) as elec_region,
-             max(case when fuel_type = 'G' then gsp_ldz end) as gas_region
-      from cte_report_dates crd
-               left join cte_tariff_accounts_full ta
-                         on crd.raw_date between ta.start_date and nvl(ta.end_date, getdate() + 100)
-      group by raw_date, account_id) account_report_level
-group by raw_date, elec_region, gas_region
-order by raw_date, elec_region, gas_region
