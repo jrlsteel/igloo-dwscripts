@@ -1,4 +1,3 @@
-;
 with cte_report_dates as
     (
         select date
@@ -272,9 +271,3 @@ order by date::timestamp,
          tariff_advertised_name,
          tariff_uid,
          region
-;
-
-
-
-
-
