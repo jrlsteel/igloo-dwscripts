@@ -1,4 +1,3 @@
-;
 with cte_report_dates as
     (
         select date
@@ -106,38 +105,39 @@ select distinct supplier_name,
                 renewable_percentage,
                 default_3_years,
                 number_of_customer_accounts,
+                'N'  as is_tou_tariff,
                 is_multi_reg_tariff,
                 is_multi_tier_tariff,
                 standing_charge,
                 single_rate_unit_rate,
-                multi_tier_volume_break_1,
-                multi_tier_volume_break_2,
-                multi_tier_volume_break_3,
-                multi_tier_volume_break_4,
-                multi_tier_volume_break_1_uom,
-                multi_tier_volume_break_2_uom,
-                multi_tier_volume_break_3_uom,
-                multi_tier_volume_break_4_uom,
-                multi_tier_unit_rate_1,
-                multi_tier_unit_rate_2,
-                multi_tier_unit_rate_3,
-                multi_tier_unit_rate_4,
-                multi_tier_unit_rate_5,
-                multi_tier_unit_rate_op,
-                multi_tier_unit_rate_op_2,
-                multi_tier_unit_rate_op_3,
-                assumed_consumption_split_1,
-                assumed_consumption_split_2,
-                assumed_consumption_split_3,
-                assumed_consumption_split_4,
-                assumed_consumption_split_5,
-                multi_reg_period_1_unit_rate,
-                multi_reg_period_2_unit_rate,
-                multi_reg_period_3_unit_rate,
-                multi_reg_period_4_unit_rate,
-                multi_reg_period_5_unit_rate,
-                dual_fuel_discount,
-                online_discount,
+                null as multi_tier_volume_break_1,
+                null as multi_tier_volume_break_2,
+                null as multi_tier_volume_break_3,
+                null as multi_tier_volume_break_4,
+                null as multi_tier_volume_break_1_uom,
+                null as multi_tier_volume_break_2_uom,
+                null as multi_tier_volume_break_3_uom,
+                null as multi_tier_volume_break_4_uom,
+                null as multi_tier_unit_rate_1,
+                null as multi_tier_unit_rate_2,
+                null as multi_tier_unit_rate_3,
+                null as multi_tier_unit_rate_4,
+                null as multi_tier_unit_rate_5,
+                null as multi_tier_unit_rate_op,
+                null as multi_tier_unit_rate_op_2,
+                null as multi_tier_unit_rate_op_3,
+                null as assumed_consumption_split_1,
+                null as assumed_consumption_split_2,
+                null as assumed_consumption_split_3,
+                null as assumed_consumption_split_4,
+                null as assumed_consumption_split_5,
+                null as multi_reg_period_1_unit_rate,
+                null as multi_reg_period_2_unit_rate,
+                null as multi_reg_period_3_unit_rate,
+                null as multi_reg_period_4_unit_rate,
+                null as multi_reg_period_5_unit_rate,
+                null as dual_fuel_discount,
+                null as online_discount,
                 termination_fee,
                 fix_length,
                 tariff_offer_date,
@@ -173,50 +173,18 @@ from (select 'Igloo Energy'                  as supplier_name,
              'Y'                             as online_account,
              'Y'                             as paperless_billing,
              2.6                             as renewable_percentage,
-             'N'                             as default_3_years, -- needs looking at
+             'N'                             as default_3_years,
              count(distinct (ta.account_id)) as number_of_customer_accounts,
              'N'                             as is_multi_reg_tariff,
              'N'                             as is_multi_tier_tariff,
-
              t.standing_charge               as standing_charge,
-             ----19.841                      as standing_charge,
-
-             ----rthe.rate                          as single_rate_unit_rate,
              t.unit_rate                     as single_rate_unit_rate,
-             null                            as multi_tier_volume_break_1,
-             null                            as multi_tier_volume_break_2,
-             null                            as multi_tier_volume_break_3,
-             null                            as multi_tier_volume_break_4,
-             null                            as multi_tier_volume_break_1_uom,
-             null                            as multi_tier_volume_break_2_uom,
-             null                            as multi_tier_volume_break_3_uom,
-             null                            as multi_tier_volume_break_4_uom,
-             null                            as multi_tier_unit_rate_1,
-             null                            as multi_tier_unit_rate_2,
-             null                            as multi_tier_unit_rate_3,
-             null                            as multi_tier_unit_rate_4,
-             null                            as multi_tier_unit_rate_5,
-             null                            as multi_tier_unit_rate_op,
-             null                            as multi_tier_unit_rate_op_2,
-             null                            as multi_tier_unit_rate_op_3,
-             null                            as assumed_consumption_split_1,
-             null                            as assumed_consumption_split_2,
-             null                            as assumed_consumption_split_3,
-             null                            as assumed_consumption_split_4,
-             null                            as assumed_consumption_split_5,
-             null                            as multi_reg_period_1_unit_rate,
-             null                            as multi_reg_period_2_unit_rate,
-             null                            as multi_reg_period_3_unit_rate,
-             null                            as multi_reg_period_4_unit_rate,
-             null                            as multi_reg_period_5_unit_rate,
-             null                            as dual_fuel_discount,
-             null                            as online_discount,
              0                               as termination_fee,
              null                            as fix_length,
              '31/03/2017'                    as tariff_offer_date,
              null                            as tariff_withdraw_date,
              null                            as tariff_expiry_date,
-             '01/06/2019'                    as tariff_change_date
+             t.billing_start_date            as tariff_change_date
 
       FROM ref_calculated_tariff_accounts ta
                inner join ref_tariffs t
@@ -233,14 +201,12 @@ from (select 'Igloo Energy'                  as supplier_name,
 
       group by crd.Report_Date,
                t.name,
-               --- rth.tariff_type,
                t.gsp_ldz,
                t.unit_rate,
-               t.standing_charge
-
+               t.standing_charge,
+               t.billing_start_date
 
       union
-
 
       select 'Igloo Energy'                  as supplier_name,
              crd.Report_Date                 as date,
@@ -270,52 +236,18 @@ from (select 'Igloo Energy'                  as supplier_name,
              'Y'                             as online_account,
              'Y'                             as paperless_billing,
              0                               as renewable_percentage,
-             'N'                             as default_3_years, -- needs looking at
+             'N'                             as default_3_years,
              count(distinct (ta.account_id)) as number_of_customer_accounts,
              'N'                             as is_multi_reg_tariff,
              'N'                             as is_multi_tier_tariff,
-
              t.standing_charge               as standing_charge,
-             ----- 23.333                      as standing_charge,
-
-
-             --- rthe.rate                        as single_rate_unit_rate,
              t.unit_rate                     as single_rate_unit_rate,
-
-             null                            as multi_tier_volume_break_1,
-             null                            as multi_tier_volume_break_2,
-             null                            as multi_tier_volume_break_3,
-             null                            as multi_tier_volume_break_4,
-             null                            as multi_tier_volume_break_1_uom,
-             null                            as multi_tier_volume_break_2_uom,
-             null                            as multi_tier_volume_break_3_uom,
-             null                            as multi_tier_volume_break_4_uom,
-             null                            as multi_tier_unit_rate_1,
-             null                            as multi_tier_unit_rate_2,
-             null                            as multi_tier_unit_rate_3,
-             null                            as multi_tier_unit_rate_4,
-             null                            as multi_tier_unit_rate_5,
-             null                            as multi_tier_unit_rate_op,
-             null                            as multi_tier_unit_rate_op_2,
-             null                            as multi_tier_unit_rate_op_3,
-             null                            as assumed_consumption_split_1,
-             null                            as assumed_consumption_split_2,
-             null                            as assumed_consumption_split_3,
-             null                            as assumed_consumption_split_4,
-             null                            as assumed_consumption_split_5,
-             null                            as multi_reg_period_1_unit_rate,
-             null                            as multi_reg_period_2_unit_rate,
-             null                            as multi_reg_period_3_unit_rate,
-             null                            as multi_reg_period_4_unit_rate,
-             null                            as multi_reg_period_5_unit_rate,
-             null                            as dual_fuel_discount,
-             null                            as online_discount,
              0                               as termination_fee,
              null                            as fix_length,
              '26/07/2017'                    as tariff_offer_date,
              null                            as tariff_withdraw_date,
              null                            as tariff_expiry_date,
-             '01/06/2019'                    as tariff_change_date
+             t.billing_start_date            as tariff_change_date
 
       FROM ref_calculated_tariff_accounts ta
                inner join ref_tariffs t
@@ -327,19 +259,15 @@ from (select 'Igloo Energy'                  as supplier_name,
 
       group by crd.Report_Date,
                t.name,
-               --- rth.tariff_type,
                t.gsp_ldz,
                t.unit_rate,
-               t.standing_charge
+               t.standing_charge,
+               t.billing_start_date
      ) stg
+
+where date = '01-10-2020'
 
 order by date::timestamp,
          tariff_advertised_name,
          tariff_uid,
          region
-;
-
-
-
-
-
