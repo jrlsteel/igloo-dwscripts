@@ -75,7 +75,15 @@ create or replace view "vw_etl_smart_billing_reads_elec" as
                                right join cte_metering_portfolio_elec cmpe on rrsd.account_id = cmpe.account_id
                           and rrsd.mpxn = cmpe.meterpointnumber
                           and cmpe.RecID = 1
-                      order by 1, 2, 3)
+                      where rrsd.meter_id not in (select distinct meter_id
+                                               from (select meter_id, count(distinct register_id) as cnt
+                                                     from public.ref_readings_smart_daily
+                                                     group by meter_id) stg
+                                               where stg.cnt > 1)
+                     and rrsd.register_num = 1
+                     and floor(rrsd.total_consumption) = rrsd.register_value
+                      order by 1, 2, 3
+        )
        , cte_qry2 as (
         select *, row_number() over (partition by account_id, mpxn order by timestamp desc) as RowID
         from cte_qry1
