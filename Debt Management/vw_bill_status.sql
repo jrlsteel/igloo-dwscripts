@@ -36,3 +36,6 @@ from ref_cdb_users users
 where transactiontype = 'BILL'
   and amount_pence > 0
 order by user_id, contract_id, bill_date;
+
+alter table vw_bill_status
+    owner to igloo;
