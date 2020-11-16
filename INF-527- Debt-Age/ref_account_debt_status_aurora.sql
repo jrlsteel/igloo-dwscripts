@@ -14,6 +14,7 @@ create table if not exists ref_account_debt_status
 	bill_amount integer ,
 	value_paid_off bigint ,
 	outstanding_value bigint ,
-	payment_method varchar(4)
+	payment_method varchar(4),
+  etlchange timestamp
 )
 ;

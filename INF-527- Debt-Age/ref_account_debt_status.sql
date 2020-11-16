@@ -14,7 +14,8 @@ create table ref_account_debt_status
 	bill_amount integer encode az64,
 	value_paid_off bigint encode az64,
 	outstanding_value bigint encode az64,
-	payment_method varchar(4)
+	payment_method varchar(4),
+  etlchange timestamp
 )
 diststyle key
 ;
