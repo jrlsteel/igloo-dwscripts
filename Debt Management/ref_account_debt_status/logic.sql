@@ -1,5 +1,7 @@
 -- drop table temp_account_debt_status;
 -- create table temp_account_debt_status as
+drop table ref_account_debt_status;
+create table ref_account_debt_status as
 select users.id                                                                 as user_id,
        sc.external_id                                                           as contract_id,
        'ensek_account'                                                          as contract_type,

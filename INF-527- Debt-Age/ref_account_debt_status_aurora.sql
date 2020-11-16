@@ -1,13 +1,20 @@
-create table ref_account_debt_status
+create table if not exists ref_account_debt_status
 (
-	user_id int,
-	contract_id int,
-	contract_type varchar(256),
-	current_account_balance int,
-	current_direct_debit int,
-	bills_outstanding int,
-	transaction_id int,
-	bill_date timestamp,
-	bill_age int
+	user_id bigint,
+	contract_id bigint ,
+	contract_type varchar(13),
+	current_account_balance double precision,
+	current_direct_debit bigint ,
+	bills_outstanding bigint ,
+	transaction_id bigint ,
+	bill_date timestamp ,
+	bill_age bigint ,
+	hold_days integer ,
+	adjusted_bill_age bigint ,
+	bill_amount integer ,
+	value_paid_off bigint ,
+	outstanding_value bigint ,
+	payment_method varchar(4),
+  etlchange timestamp
 )
 ;
