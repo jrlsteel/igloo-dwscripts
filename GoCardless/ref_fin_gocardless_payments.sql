@@ -1,0 +1,17 @@
+select id::text,
+       amount::bigint,
+       amount_refunded::bigint,
+       charge_date::timestamp,
+       created_at::timestamp,
+       currency::text,
+       description::text,
+       reference::text,
+       status::text,
+       payout::text,
+       mandate::text,
+       subscription::text,
+       ensekid::float::bigint,
+       statementid::float::bigint,
+       extract_timestamp::timestamp as last_updated_igloo,
+       getdate()                    as etlchange
+from aws_fin_stage1_extracts.fin_stage2_gocardlesspayments
