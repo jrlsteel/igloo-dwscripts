@@ -21,6 +21,8 @@ from ref_cdb_users users
                                                   up.permissionable_type = 'App\\SupplyContract'
          left join ref_cdb_supply_contracts sc on up.permissionable_id = sc.id
          left join (select *,
+                           -- contract_type should be used in the partition by statements when there are multiple types
+                           -- of contract in the source data
                            row_number()
                            over (partition by user_id, contract_id/*, contract_type*/ order by bill_date) as unpaid_bill_number,
                            count(*) over (partition by user_id, contract_id/*, contract_type*/)           as bills_outstanding
