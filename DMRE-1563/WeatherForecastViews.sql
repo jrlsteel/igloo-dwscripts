@@ -1,12 +1,18 @@
 create view "vw_etl_weather_postcode_sectors" as
-  SELECT left(postcode, len(postcode) - 3) postcode
-  FROM aws_s3_stage1_extracts.stage1_postcodesuk
-  group by left(postcode, len(postcode) - 3)
-  order by left(postcode, len(postcode) - 3)
-  WITH NO SCHEMA BINDING
+  SELECT left("postcode 1", len("postcode 1") - 3) postcode
+  FROM aws_s3_stage2_extracts.stage2_postcodes
+  group by left("postcode 1", len("postcode 1") - 3)
+  UNION
+  SELECT "postcode 1" postcode
+  FROM aws_s3_stage2_extracts.stage2_postcodes
+  Where "postcode 1" in
+      ('IP7 7RE', 'NG16 1JF', 'TW6 2EQ', 'LL18 5YD', 'B46 3JH', 'NE15 0RH', 'RH6 0EN', 'CF62 4JD', 'BA22 8HT',
+       'HU17 7LZ', 'PA7 5NX', 'AB21 7DU', 'CM6 3TH', 'PE8 6HB', 'CH4 0GZ', 'CV23 9EU', 'NE66 3JF', 'WA14 3SB',
+       'HA4 6NG', 'CR8 5EG', 'SP4 0JF', 'DL7 9NJ', 'KA9 2PL', 'IV36 3UH')
+  Order by postcode
 ;
 
-alter table vw_etl_weather_postcode_sectors owner to igloo_john_steel
+alter table vw_etl_weather_postcode_sectors owner to igloo
 ;
 
 create view vw_etl_weather_forecast_hourly_load as
