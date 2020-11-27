@@ -61,7 +61,7 @@ create view vw_etl_weather_forecast_hourly_load as
 alter table vw_etl_weather_forecast_hourly_load owner to igloo_john_steel
 ;
 
-create view vw_etl_weather_forecast_daily_load as
+create or replace view vw_etl_weather_forecast_daily_load as
   select outcode,
          city_name,
          lon,
@@ -69,6 +69,7 @@ create view vw_etl_weather_forecast_daily_load as
          lat,
          country_code,
          state_code,
+         forecast_issued,
          moonrise_ts,
          wind_cdir,
          rh,
