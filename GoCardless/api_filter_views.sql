@@ -18,7 +18,8 @@ from aws_fin_stage1_extracts.fin_go_cardless_api_events subscription_events
          left join public.ref_fin_gocardless_subscriptions existing_subscriptions
                    on subscription_events.subscription = existing_subscriptions.id
 where subscription_events.resource_type = 'subscriptions'
-  and (subscription_events.created_at::timestamp > nvl(existing_subscriptions.last_updated_igloo, '2000-01-01')::timestamp)
+  and (subscription_events.created_at::timestamp >
+       nvl(existing_subscriptions.last_updated_igloo, '2000-01-01')::timestamp)
   and len(subscription_events.subscription) > 0
 order by subscription_events.subscription
 with no schema binding
@@ -33,6 +34,7 @@ from aws_fin_stage1_extracts.fin_go_cardless_api_events payment_events
 where payment_events.resource_type = 'payments'
   and (payment_events.created_at::timestamp > nvl(existing_payments.last_updated_igloo, '2000-01-01')::timestamp)
   and len(payment_events.payment) > 0
+  and payment_events.created_at::timestamp > '2020-11-26' -- TODO - TEMPORARY, REMOVE WHEN STAGING SCRIPT IS FIXED
 order by payment_events.payment
 with no schema binding
 ;
@@ -49,3 +51,15 @@ where refund_events.resource_type = 'refunds'
 order by refund_events.refund
 with no schema binding
 ;
+
+
+select count(*) from vw_gc_updates_mandates;
+
+select count(*) from vw_gc_updates_subscriptions; --225965
+
+select count(*) from vw_gc_updates_refunds; --78328
+
+select count(*) from vw_gc_updates_payments;
+select * from vw_gc_updates_payments
+
+select * from vw_gc_updates_subscriptions
