@@ -51,6 +51,18 @@ order by refund_events.refund
 with no schema binding
 ;
 
+-- customers
+create or replace view vw_gc_updates_customers as
+select mf.customerid
+from aws_fin_stage1_extracts.fin_go_cardless_api_mandates_files mf
+          left join aws_fin_stage1_extracts.fin_go_cardless_api_clients cl
+                    on mf.customerid = cl.client_id
+where cl.ensekid is null
+with no schema binding
+;
+
+
+
 
 select count(*) from vw_gc_updates_mandates;
 
