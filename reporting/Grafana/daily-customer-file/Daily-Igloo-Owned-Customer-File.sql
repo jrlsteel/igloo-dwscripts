@@ -1,5 +1,5 @@
---create table temp_reporting_dcf as
 select all_ids.account_id                                                                   as account_id,
+       --        q.id                                                                                 as quote_id,
        elec_stats.start_date                                                                as Elec_SSD,
        gas_stats.start_date                                                                 as Gas_SSD,
        elec_stats.end_date                                                                  as Elec_ED,
@@ -94,7 +94,7 @@ select all_ids.account_id                                                       
                    else gas_loss_type end
            end                                                                              as account_loss_type,
 
-       elec_stats.GSP                                                                       as GSP,
+       nvl(elec_stats.GSP, gsp_all_mps.gsp)                                                 as GSP,
        gas_stats.LDZ                                                                        as LDZ,
        case when wl1.HMI then null else sc.created_at end                                   as WL0_date,
        case when wl1.HMI then null else wl1.asd end                                         as WL1_date,
@@ -120,7 +120,6 @@ select all_ids.account_id                                                       
        q.projected_cost                                                                     as quoted_total_spend,
        datediff(days, least(Elec_SSD, Gas_SSD), payment_stats.first_payment_datetime) <= 10 as first_payment_success,
        payment_stats.num_payments                                                           as num_payments,
-
        payment_stats.latest_payment_datetime                                                as latest_dd_received_date,
        coalesce(latest_dd_received_date, '1970-01-01') >= dateadd(months, -1, getdate())    as payment_in_last_month,
        left(addr.postcode, len(addr.postcode) - 3)                                          as outcode,
@@ -149,12 +148,13 @@ select all_ids.account_id                                                       
        billing_performance.perf3                                                            as bill_perf_3,
        occ_acc_current.account_id is not null                                               as occupier_account,
        coalesce(occ_acc_current.days_since_cot, occ_acc_hist.days_since_cot)                as days_as_occ_acc,
+       rt.amount                                                                            as signup_credit,
        getdate()                                                                            as etlchange
 from (select distinct account_id
       from ref_meterpoints_raw
       order by account_id) all_ids
          left join
-     -- ELEC ------------------------------------------------------------------------------------------------ ELEC
+     -- <ELEC> ------------------------------------------------------------------------------------------------ <ELEC>
          (select mp_elec.account_id,
                  count(distinct meterpointnumber)                     as num_meterpoints,
                  min(greatest(supplystartdate, associationstartdate)) as start_date,
@@ -248,9 +248,9 @@ from (select distinct account_id
                     where rmr.meterpointtype = 'E'
                     group by rmr.account_id) elec_et
                    on elec_et.account_id = all_ids.account_id
-    -- ELEC ------------------------------------------------------------------------------------------------ ELEC
+    -- </ELEC> ------------------------------------------------------------------------------------------------ </ELEC>
          left join
-     -- GAS ---------------------------------------------------------------------------------------------- GAS
+     -- <GAS> ---------------------------------------------------------------------------------------------- <GAS>
          (select mp_gas.account_id,
                  count(distinct meterpointnumber)                     as num_meterpoints,
                  min(greatest(supplystartdate, associationstartdate)) as start_date,
@@ -347,7 +347,13 @@ from (select distinct account_id
                     where rmr.meterpointtype = 'G'
                     group by rmr.account_id) gas_et
                    on gas_et.account_id = all_ids.account_id
-    -- GAS ---------------------------------------------------------------------------------------------- GAS
+    -- </GAS> ---------------------------------------------------------------------------------------------- </GAS>
+
+    -- GSP including cancelled elec meterpoints to cover gas-only accounts
+         left join (select account_id, max(attributes_attributevalue) as gsp
+                    from ref_meterpoints_attributes rma_all_gsp
+                    where attributes_attributename = 'GSP'
+                    group by account_id) gsp_all_mps on gsp_all_mps.account_id = all_ids.account_id
 
     -- QUOTES and BILLING ------------------------------------------------------------------------ QUOTES and BILLING
          left join (select * from ref_cdb_supply_contracts where id != 54995) sc
@@ -366,6 +372,11 @@ from (select distinct account_id
                     group by account_id) wl1
                    on all_ids.account_id = wl1.account_id
          left join ref_cdb_addresses addr on sc.supply_address_id = addr.id
+         left join (select *, row_number() over (partition by ref_id order by amount desc) as rn
+                    from ref_cdb_reward_transactions
+                    where type in (5002, 5003)
+                      and ref_type = 'App\\SupplyContract') rt
+                   on rt.ref_id = sc.id and rt.rn = 1
 
     -- STAGE 2 EXTRACTS FOR DIRECT DEBIT & ACCOUNT BALANCE ---------------------------------------------------------
     -- most recent direct debit payment (for payment day of month)
@@ -398,8 +409,7 @@ from (select distinct account_id
                            count(*)                        as num_payments
                     from (select *
                           from ref_account_transactions
-                          where transactiontype = 'PAYMENT'
-                            and method = 'Direct Debit') payments
+                          where transactiontype in ('PAYMENT', 'AAC_CP', 'AAC_BP')) payments
                     group by account_id) payment_stats on payment_stats.account_id = all_ids.account_id
     -- payment layers for upcoming dd amount (with and without winter uplift)
          left join (select acc_end_dates.account_id,
@@ -425,7 +435,7 @@ from (select distinct account_id
                                             (pl.effective_to :: timestamp) >= acc_end_dates.end_date)
                     group by acc_end_dates.account_id) dd_pay_layers
                    on dd_pay_layers.account_id = all_ids.account_id
--- Bill info
+    -- Bill info
          left join (with bill_types as
                              (select account_id,
                                      current_bill_date as bill_date,
@@ -524,7 +534,7 @@ from (select distinct account_id
                                        on rat.account_id = bill_dates.acc_id and rat.transactiontype = 'BILL'
                     group by bill_dates.acc_id
                     order by bill_dates.acc_id) billing_performance on billing_performance.acc_id = all_ids.account_id
--- occupier accounts
+    -- occupier accounts
          left join (select *, row_number() over (partition by account_id order by etl_change desc, cot_date) as rn
                     from ref_occupier_accounts) occ_acc_current
                    on occ_acc_current.account_id = all_ids.account_id and occ_acc_current.rn = 1
