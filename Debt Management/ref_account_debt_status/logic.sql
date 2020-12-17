@@ -2,6 +2,8 @@
 -- create table temp_account_debt_status as
 drop table ref_account_debt_status;
 create table ref_account_debt_status as
+    truncate table ref_account_debt_status;
+insert into ref_account_debt_status
 select users.id                                                                 as user_id,
        sc.external_id                                                           as contract_id,
        'ensek_account'                                                          as contract_type,
@@ -16,7 +18,8 @@ select users.id                                                                 
        oldest_unpaid_bill.bill_amount,
        oldest_unpaid_bill.value_paid_off,
        oldest_unpaid_bill.outstanding_value,
-       decode(nvl(current_gocardless.active_subscriptions, 0), 0, 'PORB', 'DD') as payment_method
+       decode(nvl(current_gocardless.active_subscriptions, 0), 0, 'PORB', 'DD') as payment_method,
+       getdate() as etlchange
 from ref_cdb_users users
          left join ref_cdb_user_permissions up on up.user_id = users.id and
                                                   up.permission_level = 0 and
@@ -41,8 +44,8 @@ from ref_cdb_users users
                            count(mandates.mandate_id) as active_mandates,
                            count(subscriptions.id)    as active_subscriptions,
                            sum(subscriptions.amount)  as total_monthly_payment
-                    from (select distinct client_id, ensekid
-                          from aws_fin_stage1_extracts.fin_go_cardless_api_clients) gc_id_map
+                    from (select distinct client_id, igl_acc_id as ensekid
+                          from vw_gocardless_customer_id_mapping) gc_id_map
                              left join ref_fin_gocardless_mandates mandates
                                        on mandates.customerid = gc_id_map.client_id and mandates.status = 'active'
                              left join ref_fin_gocardless_subscriptions subscriptions
