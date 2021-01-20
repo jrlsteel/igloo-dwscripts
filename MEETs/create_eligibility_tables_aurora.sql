@@ -14,5 +14,6 @@ create table ref_meets_eligibility
     num_gas              int,
     num_gas_dcc_enabled  int,
     num_gas_with_hh      int,
-    num_gas_s2           int
+    num_gas_s2           int,
+    etlchange            timestamp
 )
