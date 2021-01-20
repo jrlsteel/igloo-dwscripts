@@ -1,4 +1,4 @@
-create or replace view vw_bill_status as
+create or replace view vw_debit_status as
 select transaction_id,
        users.id                                                      as user_id,
        account_id                                                    as contract_id,
@@ -33,9 +33,9 @@ from ref_cdb_users users
                            currentbalance                                           as ensek_calculated_balance
                     from ref_account_transactions) summed_transactions
                    on summed_transactions.account_id = sc.external_id
-where transactiontype = 'BILL'
+where transactiontype in ('BILL',  'R', 'PAYMENT')
   and amount_pence > 0
 order by user_id, contract_id, bill_date;
 
-alter table vw_bill_status
+alter table vw_debit_status
     owner to igloo;
