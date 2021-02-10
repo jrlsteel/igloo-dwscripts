@@ -1,5 +1,20 @@
+-- Some columns have a postfix numbers after them.
+--
+-- They are for financial relief calculations and defined as:
+-- _1 includes accounts with any balance
+-- _2 includes accounts in credit by less than current level DD
+-- _3 includes accounts where credit is less than zero
+
 create or replace view vw_ofgem_covid19_v2 as
-with unused as (select null),
+with cte_constants as (
+        select
+        12::INT                                                                         as MONTHS_IN_YEAR,
+        365::INT                                                                        as DAYS_IN_YEAR,
+        1.05::FLOAT                                                                     as VAT_MULTIPLE,
+        0.01::FLOAT                                                                     as POUNDS_IN_PENCE,
+        0.75::FLOAT                                                                     as RECOVERABILITY_FACTOR_1,
+        0.47::FLOAT                                                                     as RECOVERABILITY_FACTOR_2
+    ),
      cte_date_range as (
          select dateadd(second, -1, date_trunc('month', getdate())) as month_end,
                 date_trunc('month', month_end)                      as month_start
@@ -23,6 +38,45 @@ with unused as (select null),
            and rat_lp.amount < 0
          group by account_id, month_end
      ),
+     cte_latest_dd_change as (
+        select all_ids.igl_acc_id as customer_id,
+                max(gc_events.created_at) as date
+        from public.vw_gocardless_customer_id_mapping all_ids
+                  left join public.ref_fin_gocardless_mandates man
+                            on all_ids.client_id = man.customerid and
+                               man.status in ('active', 'submitted')
+                  left join public.ref_fin_gocardless_subscriptions sub
+                            on sub.mandate = man.mandate_id and sub.status = 'active'
+                  left join aws_fin_stage1_extracts.fin_go_cardless_api_events gc_events
+                            on gc_events.subscription = sub.id
+                                and gc_events.resource_type = 'subscriptions'
+                                and gc_events.action != 'payment_created'
+        group by customer_id
+     ),
+     cte_elec_tariff_at_date as (
+        select
+        tariff_accounts.account_id                                                      as account_id,
+        tariff_accounts.start_date                                                      as start_date,
+        tariff_accounts.end_date                                                        as end_date,
+        standing_charge                                                                 as sc,
+        unit_rate                                                                       as ur
+        from public.ref_calculated_tariff_accounts tariff_accounts
+            left join public.ref_tariffs tariffs
+                on tariff_accounts.tariff_id = tariffs.id
+        where fuel_type = 'E'
+     ),
+     cte_gas_tariff_at_date as (
+        select
+        tariff_accounts.account_id                                                      as account_id,
+        tariff_accounts.start_date                                                      as start_date,
+        tariff_accounts.end_date                                                        as end_date,
+        standing_charge                                                                 as sc,
+        unit_rate                                                                       as ur
+        from public.ref_calculated_tariff_accounts tariff_accounts
+            left join public.ref_tariffs tariffs
+                on tariff_accounts.tariff_id = tariffs.id
+        where fuel_type = 'G'
+     ),
      cte_gc_info as (
          select igl_acc_id,
                 date_range.month_start,
@@ -34,10 +88,10 @@ with unused as (select null),
                 max(man_cancellations.mandate) is not null               as man_canc_in_window
          from public.vw_gocardless_customer_id_mapping all_ids
                   left join cte_date_range date_range on true
-                  left join public.vw_mandates_fixed man
+                  left join public.ref_fin_gocardless_mandates man
                             on all_ids.client_id = man.customerid and
                                man.status in ('active', 'submitted')
-                  left join public.vw_subscriptions_fixed sub
+                  left join public.ref_fin_gocardless_subscriptions sub
                             on sub.mandate = man.mandate_id and sub.status = 'active'
                   left join aws_fin_stage1_extracts.fin_go_cardless_api_events sub_changes
                             on sub_changes.resource_type = 'subscriptions' and
@@ -130,15 +184,22 @@ with unused as (select null),
                          dcf.days_as_occ_acc is not null and
                          date_range.month_end between dcf.acc_ssd and (dcf.acc_ssd + days_as_occ_acc) as occ_acc_month_end,
                          attr_psr.attribute_custom_value is not null                                  as psr,
-                         ((num_elec_mpns * vlr.elec_sc * 365) + (eac_igloo_ca * vlr.elec_ur)) * 0.01 *
-                         1.05 / -- VLR needs to be updated to something that accounts for timespan
-                         12                                                                           as elec_monthly_usage_sterling,
-                         ((num_gas_mpns * vlr.gas_sc * 365) + (aq_igloo_ca * vlr.gas_ur)) * 0.01 * 1.05 /
-                         12                                                                           as gas_monthly_usage_sterling,
+                         ((num_elec_mpns * vlr.elec_sc * DAYS_IN_YEAR) + (eac_igloo_ca * vlr.elec_ur)) *
+                         POUNDS_IN_PENCE * VAT_MULTIPLE / MONTHS_IN_YEAR                              as elec_monthly_usage_sterling,
+                         ((num_gas_mpns * vlr.gas_sc * DAYS_IN_YEAR) + (aq_igloo_ca * vlr.gas_ur)) *
+                         POUNDS_IN_PENCE * VAT_MULTIPLE / MONTHS_IN_YEAR                              as gas_monthly_usage_sterling,
+                         ((num_elec_mpns * elec_tariff_at_last_dd_change.sc * DAYS_IN_YEAR) +
+                         (eac_igloo_ca * elec_tariff_at_last_dd_change.ur)) *
+                         POUNDS_IN_PENCE * VAT_MULTIPLE / MONTHS_IN_YEAR                              as gas_monthly_usage_sterling_at_last_dd_change,
+                         ((num_gas_mpns * gas_tariff_at_last_dd_change.sc * DAYS_IN_YEAR) +
+                         (aq_igloo_ca * gas_tariff_at_last_dd_change.ur)) *
+                         POUNDS_IN_PENCE * VAT_MULTIPLE / MONTHS_IN_YEAR                              as elec_monthly_usage_sterling_at_last_dd_change,
                          nvl(elec_monthly_usage_sterling, 0) +
                          nvl(gas_monthly_usage_sterling, 0)                                           as monthly_usage_sterling,
+                         nvl(elec_monthly_usage_sterling_at_last_dd_change, 0) +
+                         nvl(gas_monthly_usage_sterling_at_last_dd_change, 0)                         as monthly_usage_sterling_at_last_dd_change,
                          bal.best_balance,
-                         monthly_usage_sterling + (nvl(bal.best_balance, 0.0) / 12)                   as proposed_dd,
+                         monthly_usage_sterling + (nvl(bal.best_balance, 0.0) / DAYS_IN_YEAR)         as proposed_dd,
                          nvl(gc_info.has_active_subscriptions::int, 0)                                as has_active_subscription,
                          nvl(gc_info.subscription_amount, 0)                                          as current_dd,
                          nvl(gc_info.dd_fail, false)                                                  as dd_failure,
@@ -157,16 +218,39 @@ with unused as (select null),
                          arr.account_id is not null                                                   as in_arrears,
                          arr.arrears_remaining                                                        as arrears_gbp,
                          in_arrears and not on_repayment_plan                                         as unmanaged_arrears,
-                         dd_amended and current_dd < monthly_usage_sterling                           as active_financial_relief,
+                         current_dd < monthly_usage_sterling_at_last_dd_change
+                             and current_dd < monthly_usage_sterling                                  as active_financial_relief_1,
+                         current_dd < monthly_usage_sterling_at_last_dd_change
+                             and current_dd < monthly_usage_sterling
+                             and bal.best_balance > -monthly_usage_sterling                           as active_financial_relief_2,
+                         current_dd < monthly_usage_sterling_at_last_dd_change
+                             and current_dd < monthly_usage_sterling
+                             and bal.best_balance >= 0                                                as active_financial_relief_3,
                          case
-                             when active_financial_relief then monthly_usage_sterling - current_dd
-                             else 0 end                                                               as fr_in_month,
-                         fr_in_month                                                                  as fr_total,
+                             when active_financial_relief_1 then monthly_usage_sterling - current_dd
+                             else 0 end                                                               as fr_in_month_1,
+                         case
+                             when active_financial_relief_2 then monthly_usage_sterling - current_dd
+                             else 0 end                                                               as fr_in_month_2,
+                         case
+                             when active_financial_relief_3 then monthly_usage_sterling - current_dd
+                             else 0 end                                                               as fr_in_month_3,
+                         fr_in_month_1                                                                as fr_total_1,
+                         fr_in_month_2                                                                as fr_total_2,
+                         fr_in_month_3                                                                as fr_total_3,
                          datediff(days, lpd.transaction_date, date_range.month_end)                   as days_since_payment,
                          case
-                             when days_since_payment is null then fr_total * 0.75
-                             when days_since_payment > 60 then fr_total * 0.47
-                             else 0 end                                                               as expected_unrecoverable_fr_gbp
+                             when days_since_payment is null then fr_total_1 * RECOVERABILITY_FACTOR_1
+                             when days_since_payment > 60 then fr_total_1 * RECOVERABILITY_FACTOR_2
+                             else 0 end                                                               as expected_unrecoverable_fr_gbp_1,
+                         case
+                             when days_since_payment is null then fr_total_2 * RECOVERABILITY_FACTOR_1
+                             when days_since_payment > 60 then fr_total_2 * RECOVERABILITY_FACTOR_2
+                             else 0 end                                                               as expected_unrecoverable_fr_gbp_2,
+                         case
+                             when days_since_payment is null then fr_total_3 * RECOVERABILITY_FACTOR_1
+                             when days_since_payment > 60 then fr_total_3 * RECOVERABILITY_FACTOR_2
+                             else 0 end                                                               as expected_unrecoverable_fr_gbp_3
          from cte_distinct_customer_file dcf
                   cross join cte_date_range date_range
                   left join cte_payments_in_month cte_pim
@@ -190,6 +274,14 @@ with unused as (select null),
                   left join cte_gc_info gc_info
                             on gc_info.igl_acc_id = dcf.account_id and
                                date_range.month_end = gc_info.month_end
+                  left join cte_latest_dd_change latest_dd_change
+                            on latest_dd_change.customer_id = dcf.account_id
+                  left join cte_elec_tariff_at_date elec_tariff_at_last_dd_change
+                            on elec_tariff_at_last_dd_change.account_id = dcf.account_id and
+                               latest_dd_change.date between elec_tariff_at_last_dd_change.start_date and elec_tariff_at_last_dd_change.end_date
+                  left join cte_gas_tariff_at_date gas_tariff_at_last_dd_change
+                            on gas_tariff_at_last_dd_change.account_id = dcf.account_id and
+                               latest_dd_change.date between gas_tariff_at_last_dd_change.start_date and gas_tariff_at_last_dd_change.end_date
                   left join aws_s3_stage2_extracts.stage2_cdbpaymentlayers pay_lay_wu
                             on pay_lay_wu.supply_contract_id = sc.id and
                                pay_lay_wu.payment_type_id = 5 and
@@ -204,6 +296,7 @@ with unused as (select null),
                             on bal.account_id = dcf.account_id and bal.month_end = date_range.month_end
                   left join cte_latest_payment_date lpd
                             on lpd.account_id = dcf.account_id and date_range.month_end = lpd.month_end
+                  cross join cte_constants constants
      ),
      cte_live_account_summaries as (
          select month_start                                                      as month_commencing,
@@ -253,12 +346,24 @@ with unused as (select null),
                 sum(on_repayment_plan::int)                                      as num_rep_plans,
                 sum(unmanaged_arrears::int)                                      as num_unmanaged_arrears,
                 sum(arrears_gbp) / count(arrears_gbp)                            as average_arrears_gbp,
-                sum(active_financial_relief::int)                                as ongoing_fin_relief,
-                sum(fr_in_month)                                                 as fin_relief_this_month,
-                sum(expected_unrecoverable_fr_gbp)                               as unrecoverable_fin_relief,
-                sum((active_financial_relief and psr)::int)                      as ongoing_fin_relief_psr,
-                sum(case when psr then fr_in_month else 0 end)                   as fin_relief_this_month_psr,
-                sum(case when psr then expected_unrecoverable_fr_gbp else 0 end) as unrecoverable_fin_relief_psr
+                sum(active_financial_relief_1::int)                              as ongoing_fin_relief_1,
+                sum(active_financial_relief_2::int)                              as ongoing_fin_relief_2,
+                sum(active_financial_relief_3::int)                              as ongoing_fin_relief_3,
+                sum(fr_in_month_1)                                               as fin_relief_this_month_1,
+                sum(fr_in_month_2)                                               as fin_relief_this_month_2,
+                sum(fr_in_month_3)                                               as fin_relief_this_month_3,
+                sum(expected_unrecoverable_fr_gbp_1)                             as unrecoverable_fin_relief_1,
+                sum(expected_unrecoverable_fr_gbp_2)                             as unrecoverable_fin_relief_2,
+                sum(expected_unrecoverable_fr_gbp_3)                             as unrecoverable_fin_relief_3,
+                sum((active_financial_relief_1 and psr)::int)                    as ongoing_fin_relief_psr_1,
+                sum((active_financial_relief_2 and psr)::int)                    as ongoing_fin_relief_psr_2,
+                sum((active_financial_relief_3 and psr)::int)                    as ongoing_fin_relief_psr_3,
+                sum(case when psr then fr_in_month_1 else 0 end)                   as fin_relief_this_month_psr_1,
+                sum(case when psr then fr_in_month_2 else 0 end)                   as fin_relief_this_month_psr_2,
+                sum(case when psr then fr_in_month_3 else 0 end)                   as fin_relief_this_month_psr_3,
+                sum(case when psr then expected_unrecoverable_fr_gbp_1 else 0 end) as unrecoverable_fin_relief_psr_1,
+                sum(case when psr then expected_unrecoverable_fr_gbp_2 else 0 end) as unrecoverable_fin_relief_psr_2,
+                sum(case when psr then expected_unrecoverable_fr_gbp_3 else 0 end) as unrecoverable_fin_relief_psr_3
          from cte_account_figures account_figures
          where acc_live
          group by month_start
