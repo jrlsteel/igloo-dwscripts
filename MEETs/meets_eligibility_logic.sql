@@ -1,3 +1,4 @@
+create table temp_meets_eli as
 select sc_owner.user_id,
        dcf.account_id                                as ensek_account_id,
        nvl(account_summaries.num_elec_with_hh, 0)    as num_smart_comm_elec,
@@ -14,7 +15,9 @@ select sc_owner.user_id,
        account_summaries.num_gas,
        account_summaries.num_gas_dcc_enabled,
        account_summaries.num_gas_with_hh,
-       account_summaries.num_gas_s2
+       account_summaries.num_gas_s2,
+
+       getdate()                                     as etlchange
 
 from ref_calculated_daily_customer_file dcf
          left join (select account_id,
@@ -43,8 +46,10 @@ from ref_calculated_daily_customer_file dcf
                                              on meter_type.account_id = mp.account_id and
                                                 meter_type.meter_point_id = mp.meter_point_id and
                                                 meter_type.meter_id = met.meter_id and
-                                                meter_type.metersattributes_attributename in
-                                                ('MeterType', 'Meter_Mechanism_Code')
+                                                ((mp.meterpointtype = 'E' and
+                                                  meter_type.metersattributes_attributename = 'MeterType')
+                                                    or (mp.meterpointtype = 'G' and
+                                                        meter_type.metersattributes_attributename = 'Meter_Mechanism_Code'))
                                    left join vw_smart_device_id_mpxn_map dev_ids on mp.meterpointnumber = dev_ids.mpxn
                               -- join to the device IDs which have provided half hourly readings within the past month
                                    left join (select distinct deviceid, 'E' as fuel
