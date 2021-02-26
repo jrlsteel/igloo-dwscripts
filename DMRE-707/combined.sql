@@ -22,6 +22,8 @@ from ref_cdb_surveys surv
                                                          attr_vals.id = attr.attribute_value_id
 where surv.slug = 'meandmyhome';
 
+select * from vw_mmh_responses
+
 create table temp_mmh_responses as
 select *
 from vw_mmh_responses;

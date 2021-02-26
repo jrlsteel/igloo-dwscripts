@@ -1,24 +1,35 @@
 create table ref_me_and_my_home_fixed
 as
-select cs.id as survey_id,
-       cs.title as survey_title,
-       csr.user_id,
-       csr.status,
-       up.permissionable_id,
-       sc.external_id as account_id,
-       sc.supply_address_id,
-       csq.title,
-       csq.attribute_type_id,
-       cav.attribute_value
-from ref_cdb_survey_response csr
-      inner join ref_cdb_surveys cs on cs.id = csr.survey_id
-      inner join ref_cdb_user_permissions up on csr.user_id = up.user_id
-      inner join ref_cdb_supply_contracts sc on up.permissionable_id =  sc.id and up.permissionable_type = 'App\\SupplyContract'
-      inner join ref_cdb_survey_category csc on cs.id = csc.survey_id
-      inner join ref_cdb_survey_questions csq on csc.id = csq.survey_category_id
-      inner join ref_cdb_attribute_types cat on csq.attribute_type_id = cat.id
-      inner join ref_cdb_attributes ca on cat.id = ca.attribute_type_id and ((ca.entity_id = up.user_id AND ca.entity_type = 'App\\User') OR (ca.entity_id = sc.supply_address_id AND ca.entity_type = 'App\\Address'))
-      inner join ref_cdb_attribute_values cav on ca.attribute_value_id = cav.id
-where cat.attribute_fixed = True
-and csr.status ='completed'
+select surveys.id             as survey_id,
+       surveys.title          as survey_title,
+       surv_resp.user_id,
+       surv_resp.status,
+       user_perm.permissionable_id,
+       sply_ctrct.external_id as account_id,
+       sply_ctrct.supply_address_id,
+       surv_quest.title,
+       surv_quest.attribute_type_id,
+       attr_val.attribute_value
+from ref_cdb_survey_response surv_resp
+         inner join ref_cdb_surveys surveys on surveys.id = surv_resp.survey_id
+         inner join ref_cdb_user_permissions user_perm on surv_resp.user_id = user_perm.user_id
+         inner join ref_cdb_supply_contracts sply_ctrct on user_perm.permissionable_id = sply_ctrct.id and
+                                                           user_perm.permissionable_type = 'App\\SupplyContract'
+         inner join ref_cdb_survey_category surv_cat on surveys.id = surv_cat.survey_id
+         inner join ref_cdb_survey_questions surv_quest on surv_cat.id = surv_quest.survey_category_id
+         inner join ref_cdb_attribute_types attr_types on surv_quest.attribute_type_id = attr_types.id
+         inner join ref_cdb_attributes attr on attr_types.id = attr.attribute_type_id and
+                                               ((attr.entity_id = user_perm.user_id AND attr.entity_type = 'App\\User') OR
+                                                (attr.entity_id = sply_ctrct.supply_address_id AND
+                                                 attr.entity_type = 'App\\Address'))
+         inner join ref_cdb_attribute_values attr_val on attr.attribute_value_id = attr_val.id
+where attr_types.attribute_fixed = True
+  and surv_resp.status = 'completed'
 --and  csr.user_id = 2884;
+
+--TODO add clause to check attribute is still current
+
+select distinct status from ref_cdb_survey_response
+--TODO add 'started' to status check
+
+--TODO add check for status of supply contract. Users should not be able to see data for an old address I presume
