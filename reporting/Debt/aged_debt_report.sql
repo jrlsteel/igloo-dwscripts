@@ -77,7 +77,13 @@ select dcf.account_id                                                           
        nvl(debt_ages.from180to364days, 0)                                       as from180to364days,
        nvl(debt_ages.over365days, 0)                                            as over365days,
        nvl(debt_ages.debt_age, 0)                                               as age_of_debt,
-       nvl(debt_ages.adjusted_debt_age, 0)                                      as adjusted_debt_age
+       nvl(debt_ages.adjusted_debt_age, 0)                                      as adjusted_debt_age,
+       cashflow.most_recent_pa                                                  as pa_last_review_date,
+       cashflow.pa_state                                                        as pa_last_review_outcome,
+       cashflow.next_expected_pa                                                as pa_next_review_date,
+       cashflow.reg_pay_amount                                                  as current_dd,
+       cashflow.ideal_dd_now                                                    as ideal_dd,
+       cashflow.new_pa_status                                                   as new_pa_status
 from cte_debt_ages debt_ages
         left join ref_calculated_daily_customer_file as dcf
             on debt_ages.contract_id = dcf.account_id
@@ -86,6 +92,9 @@ from cte_debt_ages debt_ages
         left join cte_payment_day payment_day
             on dcf.account_id = payment_day.igl_acc_id and
                payment_day.rownum = 1 -- for a small number of accounts, more than one row is returned
+        left join vw_pa_cashflow_modelling as cashflow
+                on cashflow.ensek_id = debt_ages.contract_id
+
 
 
 
