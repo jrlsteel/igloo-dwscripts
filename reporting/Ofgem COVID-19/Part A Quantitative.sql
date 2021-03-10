@@ -103,13 +103,13 @@ with cte_constants as (
                                     date_trunc('month', charge_date::timestamp) as month_commencing,
                                     sum((status = 'failed')::int)               as num_failed,
                                     count(*)                                    as num_attempted
-                             from public.vw_payments_fixed
+                             from public.ref_fin_gocardless_payments
                              group by subscription, mandate, month_commencing) pay
                             on pay.mandate = man.mandate_id and
                                month_commencing = date_range.month_start
                   left join public.ref_calculated_daily_customer_file dcf
                             on dcf.account_id = all_ids.igl_acc_id
-                  left join public.vw_mandates_fixed canc_man
+                  left join public.ref_fin_gocardless_mandates canc_man
                             on all_ids.client_id = canc_man.customerid
                   left join aws_fin_stage1_extracts.fin_go_cardless_api_events man_cancellations
                             on man_cancellations.resource_type = 'mandates' and
