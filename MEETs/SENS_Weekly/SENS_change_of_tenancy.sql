@@ -1,54 +1,27 @@
 create or replace view vw_sens_change_of_tenancy as
-select mpd.id                             as ext_participant_id,
-       dcf.acc_ed                         as dateofhousemove,
-       addr.addressline1,
-       addr.addressline2,
-       addr.addressline3,
-       addr.addressline4,
-       addr.postaltown,
-       addr.county,
-       addr.postcode,
-       u.first_name,
-       u.last_name,
-       'Telephone'                        as source,
-       listagg(mp.meterpointnumber, ', ') as mpan,
-       addr.uprn
-from aws_s3_stage2_extracts.stage2_cdbmeetsprojectdata mpd
-         left join (select id,
-                           replace(trim(', ' from nvl(sub_building_name_number, '') ||
-                                                  ', ' ||
-                                                  nvl(building_name_number, '') ||
-                                                  ', ' ||
-                                                  nvl(dependent_thoroughfare, '')), ', , ', ', ') as addressline1,
-                           thoroughfare                                                           as addressline2,
-                           double_dependent_locality                                              as addressline3,
-                           dependent_locality                                                     as addressline4,
-                           post_town                                                              as postaltown,
-                           county,
-                           postcode,
-                           uprn
-                    from public.ref_cdb_addresses) addr on mpd.address_id = addr.id
-         left join public.ref_cdb_users u on mpd.user_id = u.id
-         left join public.ref_cdb_user_permissions up_sc on up_sc.user_id = u.id and up_sc.permission_level = 0 and
-                                                     up_sc.permissionable_type ilike 'app%supplycontract'
-         left join public.ref_cdb_supply_contracts sc on up_sc.permissionable_id = sc.id
-         left join public.ref_meterpoints mp on mp.account_id = sc.external_id and mp.meterpointtype = 'E' and
-                                         nvl(mpd.opted_out, trunc(getdate())) between
-                                             greatest(supplystartdate, associationstartdate) and
-                                             nvl(least(supplyenddate, associationenddate), getdate() + 1)
-         left join public.ref_calculated_daily_customer_file dcf on sc.external_id = dcf.account_id
-where dcf.acc_ed is not null
-group by mpd.id,
-         dcf.acc_ed,
-         addr.addressline1,
-         addr.addressline2,
-         addr.addressline3,
-         addr.addressline4,
-         addr.postaltown,
-         addr.county,
-         addr.postcode,
-         u.first_name,
-         u.last_name,
-         addr.uprn
-order by mpd.id
-    with no schema binding
+select ext_participant_id,
+       consent_end_date as dateofhousemove,
+       address_line1    as addressline1,
+       address_line2    as addressline2,
+       address_line3    as addressline3,
+       address_line4    as addressline4,
+       postaltown,
+       county,
+       postcode,
+       firstname        as first_name,
+       surname          as last_name,
+       'Telephone'      as source,
+       mpan,
+       uprn
+from public.vw_sens_weekly_master
+where withdrawal_type = 'COT'
+with no schema binding;
+
+alter table vw_sens_change_of_tenancy
+    owner to igloo;
+
+grant select on vw_sens_change_of_tenancy to grafana;
+
+grant select on vw_sens_change_of_tenancy to igloo_grafana;
+
+grant select on vw_sens_change_of_tenancy to public;
