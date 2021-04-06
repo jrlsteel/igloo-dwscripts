@@ -17,20 +17,20 @@ with cte_constants as (
               rows between unbounded preceding and current row)     as debit_new,
         sum(credit_amount) over (partition by account_id)           as credit_present,
         currentbalance                                              as ensek_calculated_balance
-        from ref_account_transactions
+        from public.ref_account_transactions
             cross join cte_constants constants
         where creationdetail_createddate < AT_DATE
     ),
     cte_debit_status as (
         with cte_users as (
-            select user_id as id,
-                       sc.external_id as account_id
-                from ref_cdb_users users
-                     left join ref_cdb_user_permissions up on users.id = up.user_id and
+             select user_id                                          as id,
+                   sc.external_id                                    as account_id
+                from public.ref_cdb_users users
+                     left join public.ref_cdb_user_permissions up on users.id = up.user_id and
                                                               up.permissionable_type = 'App\\SupplyContract' and
                                                               up.permission_level = 0
-                     left join ref_cdb_supply_contracts sc on up.permissionable_id = sc.id
-            )
+                     left join public.ref_cdb_supply_contracts sc on up.permissionable_id = sc.id
+             )
         select transaction_id,
                users.id                                                      as user_id,
                summed_transactions.account_id                                as contract_id,
@@ -50,12 +50,12 @@ with cte_constants as (
              left join cte_users users on users.account_id = summed_transactions.account_id
              cross join cte_constants constants
         where amount_pence > 0
-        and creationdetail_createddate < AT_DATE
     ),
     cte_payment_day as (
         select all_ids.igl_acc_id,
                sub.day_of_month,
-               row_number() over (partition by igl_acc_id) as rownum
+               row_number()
+               over (partition by igl_acc_id) as rownum
         from vw_gocardless_customer_id_mapping all_ids
               left join public.ref_fin_gocardless_mandates man
                     on all_ids.client_id = man.customerid and
@@ -64,12 +64,34 @@ with cte_constants as (
                     on sub.mandate = man.mandate_id and
                        sub.status = 'active'
     ),
-    cte_account_balance as (
-        select account_id, round(sum(amount), 2)                                        as balance
-        from public.ref_account_transactions as transactions
-            cross join cte_constants constants
-        where creationdetail_createddate < AT_DATE
-        group by account_id
+    cte_balance_between_dates as (
+        select creationdetail_createddate                                               as start_date,
+               nvl(lead(creationdetail_createddate, 1)
+               over (
+                   partition by account_id
+                   order by creationdetail_createddate
+               ), getdate() + 1)                                                        as end_date,
+               currentbalance                                                           as balance,
+               account_id
+        from public.ref_account_transactions
+    ),
+    cte_balance_management as (
+        select supply_contracts.external_id                                             as account_id,
+               payment_layers.effective_from                                            as start_date,
+               payment_layers.effective_to                                              as to_date,
+               round(payment_layers.amount, 2)                                          as amount,
+               datediff(
+                    'month',
+                    payment_layers.effective_from,
+                    payment_layers.effective_to
+               )                                                                        as number_of_payments
+        from aws_s3_stage2_extracts.stage2_cdbpaymentlayers as payment_layers
+             left join aws_s3_stage2_extracts.stage2_cdbpaymenttypes as payment_types
+                on payment_types.id = payment_layers.payment_type_id and
+                   payment_types.slug = 'debt_recovery'
+             left join public.ref_cdb_supply_contracts as supply_contracts
+                on supply_contracts.id = payment_layers.supply_contract_id
+        where current_date between payment_layers.effective_from and payment_layers.effective_to
     ),
     cte_debt_ages as (
         select vbs.contract_id                                                          as contract_id,
@@ -143,20 +165,28 @@ select dcf.account_id                                                           
        cashflow.next_expected_pa                                                as pa_next_review_date,
        cashflow.reg_pay_amount                                                  as current_dd,
        cashflow.ideal_dd_now                                                    as ideal_dd,
-       cashflow.new_pa_status                                                   as new_pa_status
+       cashflow.new_pa_status                                                   as new_pa_status,
+       balance_management.start_date                                            as bm_start_date,
+       balance_management.to_date                                               as bm_to_date,
+       balance_management.amount                                                as bm_amount,
+       balance_management.number_of_payments                                    as bm_number_of_payments,
+       balman_start.balance                                                     as bm_starting_balance
 from cte_debt_ages debt_ages
-        left join ref_calculated_daily_customer_file as dcf
+        cross join cte_constants constants
+        left join public.ref_calculated_daily_customer_file as dcf
             on debt_ages.contract_id = dcf.account_id
-        left join cte_account_balance as bal
-            on debt_ages.contract_id = bal.account_id
-        left join ref_account_debt_status debt_status
+        left join cte_balance_between_dates as bal
+            on debt_ages.contract_id = bal.account_id and
+               AT_DATE between bal.start_date and bal.end_date
+        left join public.ref_account_debt_status debt_status
             on dcf.account_id = debt_status.contract_id
         left join cte_payment_day payment_day
             on dcf.account_id = payment_day.igl_acc_id and
                payment_day.rownum = 1 -- for a small number of accounts, more than one row is returned
-        left join vw_pa_cashflow_modelling as cashflow
+        left join public.vw_pa_cashflow_modelling as cashflow
                 on cashflow.ensek_id = debt_ages.contract_id
-
-
-
-
+        left join cte_balance_management as balance_management
+                on balance_management.account_id = debt_ages.contract_id
+        left join cte_balance_between_dates as balman_start
+                on balman_start.account_id = balance_management.account_id and
+                   balance_management.start_date between balman_start.start_date and balman_start.end_date
