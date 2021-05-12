@@ -8,7 +8,8 @@ with cte_account_info as (
            dcf.acc_ssd                      as acc_ssd
     from ref_cdb_supply_contracts as sc
         inner join ref_calculated_daily_customer_file as dcf
-            on sc.external_id = dcf.account_id
+            on sc.external_id = dcf.account_id and
+               dcf.signup_channel = 'broker'
 )
 select
 id                                                  as reward_transaction_id,
